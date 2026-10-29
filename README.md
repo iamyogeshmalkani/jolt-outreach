@@ -26,14 +26,17 @@ It has two parts, and nothing to run in a terminal:
 4. Click the extension, open **Settings**, paste the token, and choose **Save and check**.
 5. Click the extension and choose **Find people now** to try it.
 
-After that it looks for a few people every hour (8am to 10pm, changeable in Settings) while Chrome is
-open. Each run is small, up to 8 people, so the day's total builds up gradually. A small Chrome window
-appears briefly during each run. Leave it alone. The page picks up new people within about 5 minutes.
+After that, start a run by hand 2 or 3 times a day with **Find people now**. A run reads up to 20 videos
+(changeable in Settings, "Videos per run"), takes about 20 seconds per video, and keeps up to 40 people.
+A small Chrome window appears during the run. Leave it alone. The page picks up new people within about
+5 minutes. Videos with fewer than 2 comments are skipped, and a video already read is skipped until it
+has 5 or more new comments, so each run spends its time on videos with something new. If you would
+rather have it run by itself, tick **Also run by itself every hour** in the popup.
 
 The token stays in your Chrome and is only ever sent to GitHub. It can only touch this one repo.
 
-- If TikTok shows a verification check or you are logged out, the run stops, says why, and the hourly
-  runs pause. Fix it in Chrome and choose **Resume hourly runs**.
+- If TikTok shows a verification check or you are logged out, the run stops, says why, and any
+  automatic runs pause. Fix it in Chrome and choose **Resume automatic runs**.
 - Run the extension in **one** Chrome. It merges with what is already published, so a second one
   would not lose data, but the two would not know about each other's recent finds.
 - If a publish fails (no internet, or the token expired) it says so in the popup. Nothing is queued

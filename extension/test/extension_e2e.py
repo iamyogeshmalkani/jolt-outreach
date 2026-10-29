@@ -101,7 +101,7 @@ def main():
         # 1. one hourly alarm, for people
         time.sleep(1)
         alarms = sorted(a["name"] for a in sw.evaluate("chrome.alarms.getAll()"))
-        assert alarms == ["people"], alarms
+        assert alarms == [], alarms  # runs are started by hand unless "run every hour" is ticked
         print("alarms scheduled:", alarms)
 
         # 2. popup asks for a token first, and offers only one action
@@ -129,14 +129,14 @@ def main():
         print("settings validation:", opts.inner_text("#msg"), "| providers:", providers)
 
         # 4. a full people run, with opening lines written by (mock) Groq
-        sw.evaluate("api => chrome.storage.local.set({settings: {repo: 'o/r', token: 'good', api, aiApi: api, aiProvider: 'groq', aiKey: 'sk-test', aiModel: '', useAi: true, enabled: true, startHour: 0, endHour: 24, skip: '', paused: false}})", api)
+        sw.evaluate("api => chrome.storage.local.set({settings: {repo: 'o/r', token: 'good', api, aiApi: api, aiProvider: 'groq', aiKey: 'sk-test', aiModel: '', useAi: true, auto: false, videosPerRun: 3, startHour: 0, endHour: 24, skip: '', paused: false}})", api)
         popup.reload()
         popup.wait_for_function("!document.getElementById('people').disabled")
         popup.click("#people")
         status = wait_idle(sw, timeout=420)
         assert not status.get("error"), status
         people = json.loads(FILES["people.json"]["text"])
-        assert 1 <= len(people) <= 8, len(people)
+        assert 1 <= len(people) <= 40, len(people)
         assert len({x["found"] for x in people}) == 1 and people[0]["found"], "everyone from one run shares a run time"
         assert all(x["handle"].startswith("fan") and "reply that must be ignored" not in x["comment"] for x in people)
         assert all(x["opener"].startswith("Groq opener number") and x["priority"] in "AB" for x in people), [x["opener"] for x in people][:3]
@@ -157,7 +157,7 @@ def main():
         print("second run: no duplicate people:", len(handles), "in total")
 
         # 6. a wrong AI key ends the run with the reason and saves nobody, because no comment could be checked
-        sw.evaluate("chrome.storage.local.get('settings').then(r => chrome.storage.local.set({settings: {...r.settings, aiKey: 'wrong'}, seen: {}}))")
+        sw.evaluate("chrome.storage.local.get('settings').then(r => chrome.storage.local.set({settings: {...r.settings, aiKey: 'wrong'}, seen: {}, videos: {}}))")
         FILES.pop("people.json")
         popup.click("#people")
         status = wait_idle(sw, timeout=420)

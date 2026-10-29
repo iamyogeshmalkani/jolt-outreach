@@ -19,7 +19,7 @@ async function patchStatus(patch) {
 async function log(text) {
   const { log: lines = [] } = await store.get('log')
   lines.push(`${new Date().toLocaleTimeString()}  ${text}`)
-  await store.set({ log: lines.slice(-40) })
+  await store.set({ log: lines.slice(-250) })
 }
 
 // ---------------------------------------------------------------- browsing
@@ -78,7 +78,7 @@ let busy = false
 async function run(manual, delayMs = 0) {
   if (busy) return
   const s = await getSettings()
-  if (!manual && (s.paused || !s.enabled)) return
+  if (!manual && (s.paused || !s.auto)) return
   if (!s.token) {
     await patchStatus({ error: 'Add your GitHub token in Settings first.', running: false })
     return
@@ -103,7 +103,20 @@ async function run(manual, delayMs = 0) {
     win = await chrome.windows.create({ url: 'about:blank', focused: false }) // no fixed size: a size that does not fit the screen is rejected
     const browser = makeBrowser(win.tabs[0].id)
     const ai = { provider: s.aiProvider, key: s.aiKey.trim(), model: s.aiModel, ...(s.aiApi ? { api: s.aiApi } : {}) } // `aiApi` is only set by tests
-    const result = await findPeople(browser, known, seen, log, (rows) => pickRelevant(ai, rows, { names: competitorNames(s.competitors), log }), { competitors: s.competitors, keywords: s.keywords })
+    const { videos: savedVideos = {} } = await store.get('videos')
+    const memory = { ...savedVideos } // videos read before, with their comment counts; changed by the run
+    let result
+    try {
+      result = await findPeople(browser, known, seen, log, (rows) => pickRelevant(ai, rows, { names: competitorNames(s.competitors), log }), {
+        competitors: s.competitors,
+        keywords: s.keywords,
+        videos: Math.min(60, Math.max(1, Math.round(Number(s.videosPerRun)) || DEFAULTS.videosPerRun)),
+        memory,
+      })
+    } finally {
+      const newest = Object.entries(memory).sort((a, b) => b[1].at - a[1].at).slice(0, 4000)
+      await store.set({ videos: Object.fromEntries(newest) })
+    }
 
     const found = result.people.length
     if (found && s.aiKey && s.useAi) {
@@ -136,10 +149,10 @@ async function run(manual, delayMs = 0) {
 }
 
 // -------------------------------------------------------------- schedule
-// One alarm: look for people every hour. Older versions also set a video alarm, so an update clears all alarms first.
+// Runs are started by hand. Only when "run every hour" is switched on is there an alarm. Older versions also set a video alarm, so an update clears all alarms first.
 async function schedule() {
   const s = await getSettings()
-  if (!s.enabled) {
+  if (!s.auto) {
     await chrome.alarms.clearAll()
     return
   }

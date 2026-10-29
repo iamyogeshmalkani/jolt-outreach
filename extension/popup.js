@@ -20,23 +20,25 @@ async function render() {
   $('error').hidden = !status.error
   $('error').textContent = status.error || ''
   $('resume').hidden = !s.paused
-  $('enabled').checked = s.enabled
+  $('auto').checked = s.auto
   const who = `${PROVIDERS[s.aiProvider]?.label ?? 'AI'} (${modelOf({ provider: s.aiProvider, model: s.aiModel })})`
   $('claude').textContent = !s.aiKey
     ? 'Add an AI key in Settings. It picks which comments are really about a habit.'
     : s.useAi
       ? `${who} picks the comments and writes the opening lines.`
       : `${who} picks the comments. Opening lines use the built-in templates.`
-  $('hours').textContent = `Runs between ${s.startHour}:00 and ${s.endHour}:00 while Chrome is open.`
+  $('hours').textContent = s.auto
+    ? `Also runs by itself between ${s.startHour}:00 and ${s.endHour}:00 while Chrome is open.`
+    : `Each run reads up to ${s.videosPerRun} videos. Start one by hand 2 or 3 times a day.`
   $('people').disabled = Boolean(status.running)
   $('log').textContent = log.join('\n') || 'Nothing yet.'
 }
 
 $('people').onclick = () => send({ type: 'run' })
 $('resume').onclick = () => send({ type: 'resume' })
-$('enabled').onchange = async (e) => {
+$('auto').onchange = async (e) => {
   const { settings = {} } = await chrome.storage.local.get('settings')
-  await chrome.storage.local.set({ settings: { ...DEFAULTS, ...settings, enabled: e.target.checked } })
+  await chrome.storage.local.set({ settings: { ...DEFAULTS, ...settings, auto: e.target.checked } })
   send({ type: 'reschedule' })
 }
 $('settings').onclick = (e) => { e.preventDefault(); chrome.runtime.openOptionsPage() }

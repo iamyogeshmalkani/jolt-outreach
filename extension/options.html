@@ -43,12 +43,25 @@
     </section>
 
     <section>
-      <h2>When it runs</h2>
+      <h2>How much a run reads</h2>
+      <label>Videos per run <span class="hint">(a run takes about 20 seconds per video)</span>
+        <input id="videosPerRun" type="number" min="1" max="60" />
+      </label>
+      <p class="hint">Videos with fewer than 2 comments are skipped, and so are videos read before that have not got 5 or more new comments.</p>
+    </section>
+
+    <section>
+      <h2>Automatic runs</h2>
+      <p class="hint">Only used when "Also run by itself every hour" is ticked in the popup.</p>
       <div class="row">
         <label>From hour <input id="startHour" type="number" min="0" max="23" /></label>
         <label>Until hour <input id="endHour" type="number" min="1" max="24" /></label>
       </div>
-      <label>People to skip (handles you already contacted)
+    </section>
+
+    <section>
+      <h2>People to skip</h2>
+      <label>Handles you already contacted
         <textarea id="skip" rows="4" placeholder="one handle per line, or separated by spaces"></textarea>
       </label>
     </section>

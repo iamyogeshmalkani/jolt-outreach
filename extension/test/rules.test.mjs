@@ -88,3 +88,14 @@ test('a comment that names a competitor is tagged specific, with the user\'s own
   assert.equal(r.priority('opalescent sky vibes', ['Opal']), 'B', 'whole words only')
   assert.equal(r.priority('c++ is fun and so is Opal (beta)', ['C++', 'Opal (beta)']), 'A', 'names with symbols are matched literally')
 })
+
+test('comment counts: plain numbers, thousands separators and K or M', () => {
+  assert.equal(r.parseCount('40'), 40)
+  assert.equal(r.parseCount('1,234'), 1234)
+  assert.equal(r.parseCount('1.2K'), 1200)
+  assert.equal(r.parseCount('3M'), 3_000_000)
+  assert.equal(r.parseCount('1,2K'), 1200)
+  assert.equal(r.parseCount(''), null)
+  assert.equal(r.parseCount('Comments'), null)
+  assert.equal(r.parseCount(undefined), null)
+})

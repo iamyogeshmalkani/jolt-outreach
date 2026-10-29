@@ -66,10 +66,22 @@ export function mentionsCompetitor(text, names) {
   return new RegExp(`(?<![a-z0-9])(?:${body})(?![a-z0-9])`, 'i').test(text || '')
 }
 
-// One run is small on purpose: it runs every hour, so the day's total adds up without any single run being long.
+// A run is started by hand, a few times a day, so it can be long. How many videos it reads is a setting (videosPerRun).
 export const LIMITS = {
-  targetPeople: 8, peopleQueries: 2, peopleVideos: 3,
+  targetPeople: 40,  // a run stops once it has this many people
+  minComments: 2,    // a video with fewer comments than this is flagged and skipped
+  regrow: 5,         // a video read before is read again only once it has this many more comments
+  maxFails: 5,       // videos in a row that fail to open or load before the run gives up
   maxPeople: 300,
+}
+
+// TikTok shows counts like "40", "1,234", "1.2K" or "3M".
+export function parseCount(text) {
+  const m = /^\s*([\d.,]+)\s*([KMB])?\s*$/i.exec(String(text || ''))
+  if (!m) return null
+  const num = parseFloat(m[2] ? m[1].replace(',', '.') : m[1].replace(/,/g, ''))
+  if (Number.isNaN(num)) return null
+  return Math.round(num * ({ K: 1e3, M: 1e6, B: 1e9 }[(m[2] || '').toUpperCase()] || 1))
 }
 
 const OPENERS = [

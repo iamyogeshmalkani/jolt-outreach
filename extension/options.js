@@ -12,7 +12,7 @@ const say = (text, bad = false) => {
 async function load() {
   const { settings = {} } = await chrome.storage.local.get('settings')
   const s = { ...DEFAULTS, ...settings }
-  for (const k of ['repo', 'token', 'startHour', 'endHour', 'skip', 'aiProvider', 'aiKey', 'aiModel']) $(k).value = s[k]
+  for (const k of ['repo', 'token', 'videosPerRun', 'startHour', 'endHour', 'skip', 'aiProvider', 'aiKey', 'aiModel']) $(k).value = s[k]
   if (!PROVIDERS[s.aiProvider]) $('aiProvider').value = DEFAULTS.aiProvider // a provider this version no longer offers
   $('useAi').checked = s.useAi
   $('keywords').value = (s.keywords ?? DEFAULTS.keywords).join('\n')
@@ -26,6 +26,7 @@ $('save').onclick = async () => {
     ...DEFAULTS, ...settings,
     repo: $('repo').value.trim(),
     token: $('token').value.trim(),
+    videosPerRun: Math.min(60, Math.max(1, Math.round(Number($('videosPerRun').value)) || DEFAULTS.videosPerRun)),
     startHour: Math.min(23, Math.max(0, Number($('startHour').value) || DEFAULTS.startHour)),
     endHour: Math.min(24, Math.max(1, Number($('endHour').value) || DEFAULTS.endHour)),
     skip: $('skip').value,
