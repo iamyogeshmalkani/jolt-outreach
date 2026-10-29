@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Jolt Reddit finder",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Finds the top posts in the subreddits you choose, their top commenter, and people who praise, review, suggest or give an opinion on what the post is about, and drafts messages and a reply with AI. You send everything yourself.",
   "permissions": [
     "storage"

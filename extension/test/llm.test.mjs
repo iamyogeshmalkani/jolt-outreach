@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import http from 'node:http'
-import { JUDGE_SYSTEM, OPENER_SYSTEM, ask, check, improve, keyProblem, parseList, pickRelevant } from '../lib/llm.js'
+import { noDash, JUDGE_SYSTEM, OPENER_SYSTEM, ask, check, improve, keyProblem, parseList, pickRelevant } from '../lib/llm.js'
 
 // A stand-in for an AI API. `reply(body, headers, url, count)` returns [status, json].
 function fake(reply) {
@@ -132,26 +132,56 @@ test('makes no request when there is nothing to improve', async () => {
   } finally { server.close() }
 })
 
-test('pickRelevant keeps only the comments the model marks true, and asks in groups of 25', async () => {
-  const { seen, server, api } = await fake((body) => groqText(JSON.stringify(JSON.parse(userOf(body)).map((t) => /my habit/.test(t) ? true : t === 'maybe' ? 'true' : false))))
+test('pickRelevant keeps the ids the model lists, asks in groups of 25, and tells it which apps matter', async () => {
+  const { seen, server, api } = await fake((body) => groqText(JSON.stringify(JSON.parse(userOf(body)).filter((c) => /my habit/.test(c.text)).map((c) => c.id).concat([99, -1, 'x']))))
   try {
     const rows = [
       { handle: 'a', text: 'my habit is scrolling all night' },
       { handle: 'b', text: 'haha so funny' },
-      { handle: 'c', text: 'maybe' },
       ...Array.from({ length: 30 }, (_, i) => ({ handle: 'x' + i, text: i === 29 ? 'my habit again' : 'lol' })),
     ]
-    const kept = await pickRelevant(groq(api), rows)
-    assert.deepEqual(kept.map((r) => r.handle), ['a', 'x29'], 'only a real true counts, not the string "true"')
+    const kept = await pickRelevant(groq(api), rows, { names: ['Opal', 'Headway'] })
+    assert.deepEqual(kept.map((r) => r.handle), ['a', 'x29'], 'ids that do not exist are ignored')
     assert.equal(seen.length, 2)
-    assert.equal(systemOf(seen[0].body), JUDGE_SYSTEM)
+    assert.equal(systemOf(seen[0].body), `${JUDGE_SYSTEM}\nApps we especially care about: Opal, Headway.`)
     assert.equal(JSON.parse(userOf(seen[0].body)).length, 25)
+    assert.deepEqual(JSON.parse(userOf(seen[1].body))[6], { id: 6, text: 'my habit again' })
   } finally { server.close() }
 })
 
-test('pickRelevant throws when the model fails or answers the wrong number of items, so unchecked comments are never kept', async () => {
+test('pickRelevant answers [] for nothing to keep, however many comments there are', async () => {
+  const { server, api } = await fake(() => groqText('[]'))
+  try { assert.deepEqual(await pickRelevant(groq(api), [{ handle: 'a', text: 'x' }, { handle: 'b', text: 'y' }, { handle: 'c', text: 'z' }]), []) } finally { server.close() }
+})
+
+test('pickRelevant asks again when the answer cannot be read, then leaves those comments out and carries on', async () => {
+  const flaky = await fake((body, h, u, n) => groqText(n === 1 ? 'I think none of them' : '[0]'))
+  try {
+    const kept = await pickRelevant(groq(flaky.api), [{ handle: 'a', text: 'x' }, { handle: 'b', text: 'y' }])
+    assert.deepEqual(kept.map((r) => r.handle), ['a'])
+    assert.equal(flaky.seen.length, 2)
+  } finally { flaky.server.close() }
+  const broken = await fake(() => groqText('no list at all'))
+  try {
+    const lines = []
+    assert.deepEqual(await pickRelevant(groq(broken.api), [{ handle: 'a', text: 'x' }], { log: async (l) => lines.push(l) }), [])
+    assert.equal(broken.seen.length, 2)
+    assert.ok(lines.some((l) => /could not be read|did not return a list/.test(l) && /Skipped 1 comments/.test(l)), lines.join('|'))
+  } finally { broken.server.close() }
+})
+
+test('pickRelevant still throws when the request itself fails, so unchecked comments are never kept', async () => {
   const down = await fake(() => [401, {}])
   try { await assert.rejects(pickRelevant(groq(down.api), [{ handle: 'a', text: 'x' }]), /did not accept the API key/) } finally { down.server.close() }
-  const short = await fake(() => groqText('[true]'))
-  try { await assert.rejects(pickRelevant(groq(short.api), [{ handle: 'a', text: 'x' }, { handle: 'b', text: 'y' }]), /wrong number/) } finally { short.server.close() }
+})
+
+test('written opening lines never keep an em or en dash', async () => {
+  assert.equal(noDash('Quitting — and coming back – is hard.'), 'Quitting, and coming back, is hard.')
+  assert.match(OPENER_SYSTEM, /em dash/)
+  const { server, api } = await fake(() => groqText(JSON.stringify(['It sounds like quitting — then coming back — is the hard part.'])))
+  try {
+    const result = { people: [{ comment: 'I quit and came back', opener: 'OPENER' }] }
+    await improve(groq(api), result)
+    assert.equal(result.people[0].opener, 'It sounds like quitting, then coming back, is the hard part.')
+  } finally { server.close() }
 })

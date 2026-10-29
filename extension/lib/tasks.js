@@ -77,7 +77,9 @@ export async function findPeople(browser, known, seen, log = async () => {}, jud
           out.people.push(makePerson(row, { creator, query, url: card.url, runAt, names }, today))
           added++
         }
-        await log(`@${creator}: ${page.rows.length} comments, ${fresh.length} to check, ${added} about their own habit`)
+        await log(`@${creator}: ${page.rows.length} comments, ${fresh.length} to check, ${added} kept`)
+        const dropped = fresh.filter((row) => !chosen.includes(row)).slice(0, 3)
+        for (const row of dropped) await log(`  left out: "${row.text.replace(/\s+/g, ' ').slice(0, 80)}"`)
         await browser.closeVideo()
         await browser.pause(2, 5)
       }

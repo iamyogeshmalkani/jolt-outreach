@@ -54,7 +54,7 @@ class FakeGitHub(BaseHTTPRequestHandler):
         user = next(m["content"] for m in body["messages"] if m["role"] == "user")
         comments = json.loads(user)
         if "screen public TikTok comments" in system:  # the check of which comments are about the writer's own habit
-            text = json.dumps(["came back" in c for c in comments])
+            text = json.dumps([c["id"] for c in comments if "came back" in c["text"]])
         else:
             text = json.dumps([f"Groq opener number {i} written for this one" for i in range(len(comments))])
         self._send(200, {"choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": text, "reasoning": "..."}}]})

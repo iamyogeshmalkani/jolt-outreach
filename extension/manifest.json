@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Jolt finder",
-  "version": "2.0.4",
+  "version": "2.0.5",
   "description": "Finds people on TikTok who describe their own screen-time struggle, and publishes them to your Jolt outreach page.",
   "permissions": [
     "storage",
