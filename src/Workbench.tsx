@@ -152,7 +152,7 @@ export default function Workbench({ loaded }: { loaded: Loaded }) {
       {loaded.demo && (
         <p className="banner">
           {online ? (
-            <>Sample people for now. The finder runs on GitHub every hour, and real ones appear here as it finds them.</>
+            <>Sample people for now. Real ones appear here after the finder runs on your computer and publishes them (<code>npm run watch</code>).</>
           ) : (
             <>
               Sample data. Run <code>npm run find</code> and <code>npm run videos</code>, then reload. Real data is read from{' '}

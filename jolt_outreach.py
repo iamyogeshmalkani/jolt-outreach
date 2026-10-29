@@ -42,9 +42,12 @@ import json
 import os
 import random
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 import time
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 # ----------------------------- settings you can edit -----------------------------
@@ -64,6 +67,7 @@ LOOP_QUERIES = 2         # searches per run
 LOOP_SCAN = 6            # videos opened per run
 BACKLOG_CAP = 30         # pause finding more while this many videos still wait to be commented on
 ACTIVE_HOURS = (8, 22)   # hourly mode only runs from the first hour up to (not including) the last
+PUBLISH_FILES = ['people.json', 'videos.json', 'seen.json', 'seen_videos.json']
 MAX_PEOPLE = 300         # keep only the newest this many people and videos in the saved lists
 MAX_VIDEOS = 150
 MIN_COMMENTS = 2         # skip videos with fewer comments than this
@@ -285,6 +289,7 @@ class Stop(Exception):
     pass
 
 
+PUBLISH = True       # set by --no-publish
 STOP_REASONS = []   # filled when TikTok asks for a login or verification; makes the run exit with an error
 
 
@@ -295,9 +300,7 @@ def pause(a=1.5, b=4.0):
 def guard(page, have_links=True):
     body = page.inner_text("body")[:4000]
     if not have_links and re.search(r"\bLog in\b", body):
-        raise Stop("The saved TikTok login was rejected. Export a fresh one with npm run export-session."
-                   if os.environ.get("JOLT_SESSION")
-                   else "TikTok is logged out. Run: python jolt_outreach.py --login")
+        raise Stop("TikTok is logged out. Run: python jolt_outreach.py --login")
     if re.search(r"captcha|verify to continue|drag the slider|are you human", body, re.I):
         raise Stop("TikTok is showing a verification check. Solve it in the browser, then run again.")
 
@@ -315,10 +318,6 @@ def open_comments(page):
 
 
 def launch(pw):
-    session = os.environ.get("JOLT_SESSION")
-    if session:  # online run (GitHub): use a saved TikTok login instead of a profile folder
-        browser = pw.chromium.launch(channel="chrome", headless=False)
-        return browser.new_context(storage_state=session, viewport={"width": 1536, "height": 800})
     OUT_DIR.mkdir(exist_ok=True)
     kwargs = dict(user_data_dir=str(OUT_DIR / "chrome-profile"), headless=False,
                   viewport={"width": 1536, "height": 800})
@@ -337,22 +336,6 @@ def do_login():
         input("Log into TikTok in the browser window, then press Enter here... ")
         ctx.close()
     print("Saved. Now run: python jolt_outreach.py")
-
-
-def export_session(path):
-    """Save the TikTok login from the local profile so an online job can use it. Treat it like a password."""
-    from playwright.sync_api import sync_playwright
-    with sync_playwright() as pw:
-        ctx = launch(pw)
-        state = ctx.storage_state()
-        ctx.close()
-    state["origins"] = []  # cookies carry the login; dropping page storage keeps this under GitHub's secret size limit
-    Path(path).write_text(json.dumps(state), encoding="utf-8")
-    os.chmod(path, 0o600)
-    if Path(path).stat().st_size > 48_000:
-        print("Warning: this is larger than GitHub allows for a secret (48 KB).")
-    print(f"Saved your TikTok login to {path}. It works like a password: never commit or share it.")
-    print(f"To use it on GitHub:  gh secret set TIKTOK_SESSION < {path}")
 
 
 def collect(people, seen, max_new):
@@ -610,6 +593,52 @@ def build_videos(new, today):
     return videos
 
 
+def run_git(*args, cwd=None):
+    r = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
+    if r.returncode:
+        raise RuntimeError((r.stderr or r.stdout).strip())
+    return r.stdout.strip()
+
+
+def publish_repo():
+    """The GitHub repo to publish to: JOLT_PUBLISH_REPO, or the origin of the clone this script is in."""
+    env = os.environ.get("JOLT_PUBLISH_REPO")
+    if env:
+        return env
+    try:
+        return run_git("remote", "get-url", "origin", cwd=Path(__file__).resolve().parent)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def publish():
+    """Push the saved lists to the `data` branch so the hosted page shows them. Never raises."""
+    repo = publish_repo()
+    if not repo:
+        print("Not published: run this from a clone of the GitHub repo, or set JOLT_PUBLISH_REPO.")
+        return
+    work = OUT_DIR / "publish"
+    try:
+        if (work / ".git").exists():
+            run_git("fetch", "--quiet", "origin", "data", cwd=work)
+            run_git("reset", "--hard", "--quiet", "FETCH_HEAD", cwd=work)
+        else:
+            run_git("clone", "--quiet", "--branch", "data", "--single-branch", repo, str(work))
+        names = [n for n in PUBLISH_FILES if (OUT_DIR / n).exists()]
+        for n in names:
+            shutil.copy(OUT_DIR / n, work / n)
+        run_git("add", *names, cwd=work)
+        if not run_git("status", "--porcelain", cwd=work):
+            print("Nothing new to publish.")
+            return
+        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
+        run_git("commit", "--quiet", "-m", f"Update {stamp}Z", cwd=work)
+        run_git("push", "--quiet", "origin", "HEAD:data", cwd=work)
+        print("Published. The page picks it up within about 5 minutes.")
+    except Exception as e:  # noqa: BLE001
+        print("Could not publish:", e)
+
+
 def pending_videos():
     """Queued videos that haven't been commented on yet, using the statuses the app saves."""
     saved = load(OUT_DIR / "ui_state.json", None) or {}
@@ -637,6 +666,8 @@ def run_videos(max_new, today, scan=VIDEO_SCAN, n_queries=None):
     videos = build_videos(found, today)
     print(f"Queued {len(found)} videos to comment on. {len(videos)} total. "
           f"Open: {OUT_DIR / 'videos.html'}")
+    if PUBLISH:
+        publish()
     return stopped
 
 
@@ -666,6 +697,8 @@ def watch(every_minutes, hours):
 
 
 def selftest():
+    global OUT_DIR
+    OUT_DIR = Path(tempfile.mkdtemp(prefix="jolt_selftest_"))  # never touch your real results
     samples = [
         ("quitter1", "Quit again for a couple days but unfortunately came back to it."),
         ("stopped1", "I downloaded it and it worked for a day and then stopped 😭"),
@@ -723,27 +756,51 @@ def selftest():
     assert pending_videos() == 1, pending_videos()
     print("hourly selftest ok")
 
+    # Publishing: push to a throwaway local repo that has a `data` branch.
+    for who in ("AUTHOR", "COMMITTER"):
+        os.environ.setdefault(f"GIT_{who}_NAME", "selftest")
+        os.environ.setdefault(f"GIT_{who}_EMAIL", "selftest@example.com")
+    with tempfile.TemporaryDirectory() as t:
+        bare, seed = Path(t) / "remote.git", Path(t) / "seed"
+        run_git("init", "-q", "--bare", str(bare))
+        run_git("init", "-q", "-b", "data", str(seed))
+        (seed / "people.json").write_text("[]")
+        run_git("add", "people.json", cwd=seed)
+        run_git("commit", "-q", "-m", "start", cwd=seed)
+        run_git("push", "-q", str(bare), "data", cwd=seed)
+        os.environ["JOLT_PUBLISH_REPO"] = str(bare)
+        save(OUT_DIR / "people.json", [{"handle": "someone"}])
+        save(OUT_DIR / "seen.json", ["someone"])
+        publish()
+        shown = run_git("--git-dir", str(bare), "show", "data:people.json")
+        assert "someone" in shown, shown
+        assert set(run_git("--git-dir", str(bare), "ls-tree", "--name-only", "data").split()) <= set(PUBLISH_FILES)
+        publish()  # nothing changed: must be a quiet no-op
+    del os.environ["JOLT_PUBLISH_REPO"]
+    print("publish selftest ok")
+
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--login", action="store_true", help="log into TikTok once")
     ap.add_argument("--selftest", action="store_true", help="check filters and page without TikTok")
     ap.add_argument("--videos", action="store_true", help="find videos to comment on and draft comments")
+    ap.add_argument("--no-publish", action="store_true",
+                    help="keep results on this computer instead of publishing them to the hosted page")
     ap.add_argument("--light", action="store_true",
                     help="with --videos: one small run, the same size as each hourly run")
-    ap.add_argument("--export-session", metavar="FILE", help="save your TikTok login to FILE for an online job")
     ap.add_argument("--every", type=int, metavar="MINUTES",
                     help="with --videos: keep running, looking for a few new videos every MINUTES")
     ap.add_argument("--hours", default=f"{ACTIVE_HOURS[0]}-{ACTIVE_HOURS[1]}",
                     help="with --every: only run between these hours, e.g. 8-22 (default)")
     ap.add_argument("--max", type=int, help=f"new people (default {TARGET_NEW}) or videos (default {VIDEO_TARGET}) to find")
     a = ap.parse_args()
+    global PUBLISH
+    PUBLISH = not a.no_publish
     if a.selftest:
         return selftest()
     if a.login:
         return do_login()
-    if a.export_session:
-        return export_session(a.export_session)
     today = date.today().isoformat()
     if a.every:
         if not a.videos:
@@ -770,6 +827,8 @@ def main():
     people = build(found, seen, today)
     print(f"Added {len(found)} new people ({sum(p['priority'] == 'A' for p in found)} priority A). "
           f"{len(people)} total. Open: {OUT_DIR / 'outreach.html'}")
+    if PUBLISH:
+        publish()
     return 1 if STOP_REASONS else 0
 
 

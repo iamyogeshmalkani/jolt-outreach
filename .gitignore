@@ -12,5 +12,3 @@ seen_seed.txt
 chrome-profile/
 .venv/
 __pycache__/
-jolt-session.json
-*session*.json

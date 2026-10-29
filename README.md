@@ -6,39 +6,53 @@ yourself.
 
 **Live page:** https://iamyogeshmalkani.github.io/jolt-outreach/
 
-Everything runs on GitHub, with nothing to install:
+It has two parts:
 
-- **The finder** (`jolt_outreach.py`) runs on GitHub every hour for videos worth a comment and once
-  a day for people to message. It only reads TikTok in a browser, and saves what it finds to the
-  `data` branch of this repo.
-- **The page** reads that data and shows one conversation at a time, with a copy button and a
-  suggested next step. Statuses (sent, replied, booked) are saved in your own browser.
+- **The finder** (`jolt_outreach.py`) runs **on your own computer**, in your own Chrome with your own
+  TikTok login. It only reads TikTok. After each run it publishes what it found to the `data`
+  branch of this repo.
+- **The page** is hosted on GitHub. It reads the `data` branch and shows one conversation at a
+  time, with a copy button and a suggested next step. Statuses (sent, replied, booked) are saved in
+  your own browser.
 
-## One-time setup: the TikTok login
+Running the finder at home, not on GitHub's servers, is on purpose: TikTok is far more likely to
+block a data-centre address than your normal connection.
 
-The hourly job needs a TikTok login. Use a spare account. This needs Node and Python on one computer, once.
+## Set up the finder (once)
 
+You need Python 3.9 or newer, Node 20 or newer, Chrome and `git` with access to this repo.
+
+    git clone https://github.com/iamyogeshmalkani/jolt-outreach.git
+    cd jolt-outreach
     npm install
-    npm run setup          # private Python environment
-    npm run login          # a Chrome window opens: log into TikTok there, press Enter in the terminal
-    npm run export-session # writes jolt-session.json (works like a password: never commit or share it)
-    gh secret set TIKTOK_SESSION < jolt-session.json
-    rm jolt-session.json
+    npm run setup       # private Python environment
+    npm run selftest    # should end with "publish selftest ok"
+    npm run login       # a Chrome window opens: log into TikTok there (a spare account), then press Enter
 
-Then start a first run from the repo's **Actions** tab: **Find people and videos**, **Run workflow**.
-After that it runs by itself (about 8:47am to 9:47pm India time, hourly). If TikTok shows a
-verification check the run fails and says so. Export a fresh login and set the secret again.
+The login is saved on your computer, in `~/jolt_outreach`. Nothing about it is uploaded.
 
-GitHub's servers are not a normal home connection, so TikTok may block them more often than your own
-computer. If most runs fail, run the finder on your own computer instead (below).
+## Use it
 
-## Run on your own computer instead
+    npm run find        # about 20 people to message (5 to 10 minutes, leave the window alone)
+    npm run videos      # about 8 videos worth a comment
+    npm run watch       # keep looking every hour, 8am to 10pm, a few videos at a time
 
-    npm run login
-    npm run find           # about 20 people to message
-    npm run videos         # about 8 videos worth a comment
-    npm run watch          # keep looking every hour, 8am to 10pm
-    npm run dev            # the page, reading ~/jolt_outreach (override with JOLT_OUT_DIR)
+Each run publishes to the live page, which picks it up within about 5 minutes. The computer must be
+on and awake for `watch`. A Chrome window opens briefly each hour. To start it automatically, run
+`npm run watch` from Task Scheduler (Windows, at log on) or a login item (Mac).
+
+Add `--no-publish` to keep results on your computer only, for example
+`node scripts/py.mjs --videos --no-publish`, then view them with `npm run dev`
+(a page on your computer that reads `~/jolt_outreach`, or the folder in `JOLT_OUT_DIR`).
+
+Run the finder on **one** computer. Two computers publishing would overwrite each other's lists.
+
+- It pauses by itself while 30 or more videos are waiting for a comment (only when you use the
+  local page, which is where it can see your statuses).
+- It stops, and says why, if TikTok asks you to log in or solve a check. Fix that in the window, then
+  start it again.
+- If a publish fails (no internet, or no git access to the repo), the results stay on your computer
+  and go out with the next successful run.
 
 ## What gets published
 
@@ -61,8 +75,8 @@ are filtered out before anything is saved.
 
 Edit the settings at the top of `jolt_outreach.py`: `NAME`, `OFFER` and `BODY` (the main message),
 the search phrases in `QUERIES` and `VIDEO_QUERIES`, and the run sizes. On the page, **Message
-template** changes the name, offer and message for your browser. To change the schedule, edit the
-`cron` lines in `.github/workflows/finder.yml`.
+template** changes the name, offer and message for your browser. To skip people you have already
+contacted, list their handles in a file called `seen_seed.txt` inside `~/jolt_outreach`.
 
 ## Please read
 
@@ -76,15 +90,17 @@ template** changes the name, offer and message for your browser. To change the s
 
 ## Optional: better opening lines
 
-Add an `ANTHROPIC_API_KEY` repository secret (and `anthropic` to `requirements.txt`) and one small
-model call per run writes the opening lines and comment drafts. Without it, built-in templates are
-used and nothing is sent anywhere.
+    .venv/bin/pip install anthropic     # on Windows: .venv\Scripts\pip install anthropic
+    export ANTHROPIC_API_KEY=...        # on Windows: set ANTHROPIC_API_KEY=...
+
+One small model call per run then writes the opening lines and comment drafts. Without a key,
+built-in templates are used and nothing is sent anywhere.
 
 ## Layout
 
-- `jolt_outreach.py` the finder
-- `.github/workflows/finder.yml` the hourly job, `pages.yml` publishes the page
-- `src/` the page, `server/dataApi.ts` the local service used only by `npm run dev`
+- `jolt_outreach.py` the finder, run through `npm run find`, `videos`, `watch` and `login`
 - `scripts/py.mjs` runs the finder with its own Python environment on Mac, Linux and Windows
+- `src/` the page, `server/dataApi.ts` the local service used only by `npm run dev`
+- `.github/workflows/pages.yml` publishes the page when the code changes
 
 Shortcuts on the page: `J` and `K` move through the list, `C` copies the reply.
