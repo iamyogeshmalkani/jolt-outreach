@@ -24,13 +24,14 @@
         <label>At least this many comments <input id="minComments" type="number" min="0" /></label>
         <label>At least this many upvotes <input id="minScore" type="number" min="0" /></label>
       </div>
-      <label>Also message people who give suggestions or reviews, per post
+      <label>Also message people who praise, review, suggest or give an opinion, per post
         <input id="suggesters" type="number" min="0" max="5" />
       </label>
-      <p class="hint">Besides the top commenter, it looks for other commenters who recommend something, give a tip or say what worked for them. 0 turns it off. With an AI key set, the AI confirms each one.</p>
+      <p class="hint">Besides the top commenter, it looks for other commenters who react to what the post is about: they recommend something, give a tip, praise or criticise it, or share their own take. 0 turns it off. With an AI key set, the AI checks each one against the post's subject. Without one, it looks for how people write and for words shared with the post.</p>
       <label>Users to skip (already contacted)
         <textarea id="skip" rows="2" placeholder="one username per line"></textarea>
       </label>
+      <p class="hint" id="memory"></p>
       <div class="row"><button id="testReddit" class="secondary">Test Reddit</button><span id="redditMsg" role="status"></span></div>
     </section>
 

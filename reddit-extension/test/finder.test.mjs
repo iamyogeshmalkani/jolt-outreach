@@ -30,7 +30,7 @@ test('keeps the first few good posts of a subreddit and finds each one\'s top co
   assert.equal(stopped, '')
   assert.deepEqual(items.map((i) => [i.id, i.people[0].author]), [['b', 'alice'], ['d', 'bob']])
   assert.ok(!api.calls.some(([k, id]) => k === 'comments' && ['a', 'c', 'e'].includes(id)), 'skipped and surplus posts are never opened')
-  assert.ok(logs.some((l) => /r\/nosurf: 2 posts kept \(skipped 1 pinned, 1 adult\)/.test(l)), logs.join('|'))
+  assert.ok(logs.some((l) => /r\/nosurf: 2 new posts kept \(skipped 1 pinned, 1 adult\)/.test(l)), logs.join('|'))
 })
 
 test('never picks the same person twice in a run, or someone already contacted', async () => {
@@ -124,4 +124,29 @@ test('a suggestion-giver already contacted is not offered again', async () => {
   k.authors.add('helper')
   const { items } = await find(api, settings({ suggesters: 2 }), k, async () => {})
   assert.deepEqual(items[0].people.map((x) => x.author), ['first'])
+})
+
+test('looks for opinions about what the post is about, using the post\'s own words', async () => {
+  const api = fakeApi({
+    top: { nosurf: [p('a', { title: 'Opal app review: does the focus blocker reduce screen time?', selftext: 'I tested it for a month.' })] },
+    comments: {
+      a: [
+        comment({ author: 'top_voice', body: 'This is exactly how I feel about my phone every single evening lately.', score: 500 }),
+        comment({ author: 'fan', body: 'Honestly I love how Opal blocks my feed apps, my screen time dropped by half and I feel much calmer.', score: 80 }),
+        comment({ author: 'offtopic', body: 'Honestly I love pizza, I think the best toppings are mushrooms and onions and I will never change.', score: 70 }),
+      ],
+    },
+  })
+  const { items } = await find(api, settings({ suggesters: 2 }), known(), async () => {})
+  assert.deepEqual(items[0].people.map((x) => [x.author, x.why]), [['top_voice', 'top'], ['fan', 'opinion']])
+})
+
+test('counts the posts it skipped because they were already seen', async () => {
+  const api = fakeApi({ top: { nosurf: [p('a'), p('b'), p('c')] }, comments: { c: topComment('carol') } })
+  const k = { posts: new Set(['a', 'b']), authors: new Set() }
+  const logs = []
+  const { items, stats } = await find(api, settings({ postsPerSub: 5 }), k, async (l) => logs.push(l))
+  assert.deepEqual(items.map((i) => i.id), ['c'])
+  assert.deepEqual(stats, { kept: 1, alreadySeen: 2 })
+  assert.ok(logs.some((l) => /1 new posts kept/.test(l)))
 })

@@ -120,18 +120,20 @@ for (const [name, cfgOf, textOf] of [['Groq', groq, groqText], ['Grok (xAI)', xa
     try {
       const items = [item(1), item(2, false), item(3)]
       items[0].people.push(person(4, 'suggestion'))
+      items[2].people.push(person(5, 'opinion'))
       const lines = []
       const used = await draft(cfgOf(api), items, async (l) => lines.push(l))
-      assert.deepEqual(used, { comments: 3, openers: 3 })
+      assert.deepEqual(used, { comments: 3, openers: 4 })
       assert.ok(items.every((i) => i.comment.startsWith('That balance')))
-      assert.deepEqual(items.flatMap((i) => i.people.map((p) => p.opener)), ['Your point about quitting really landed (0).', 'Your point about quitting really landed (1).', 'Your point about quitting really landed (2).'])
+      assert.deepEqual(items.flatMap((i) => i.people.map((p) => p.opener)), [0, 1, 2, 3].map((i) => `Your point about quitting really landed (${i}).`))
       const replyCall = seen.find((s) => systemOf(s.body) === REPLY_SYSTEM)
       assert.deepEqual(JSON.parse(userOf(replyCall.body))[0], { subreddit: 'nosurf', title: 'Post 1', body: 'Body 1' })
       const openerCall = seen.find((s) => systemOf(s.body) === OPENER_SYSTEM)
       assert.deepEqual(JSON.parse(userOf(openerCall.body)).map((x) => [x.comment, x.kind]), [
-        ['Comment 1 about quitting scrolling', 'comment'], ['Comment 4 about quitting scrolling', 'suggestion or review'], ['Comment 3 about quitting scrolling', 'comment'],
+        ['Comment 1 about quitting scrolling', 'comment'], ['Comment 4 about quitting scrolling', 'suggestion or review'],
+        ['Comment 3 about quitting scrolling', 'comment'], ['Comment 5 about quitting scrolling', 'opinion'],
       ])
-      assert.ok(lines.some((l) => l.includes(`${name} wrote 3 replies and 3 opening lines`)), lines.join('|'))
+      assert.ok(lines.some((l) => l.includes(`${name} wrote 3 replies and 4 opening lines`)), lines.join('|'))
     } finally { server.close() }
   })
 
@@ -175,7 +177,7 @@ for (const [name, cfgOf, textOf] of [['Groq', groq, groqText], ['Grok (xAI)', xa
     const { seen, server, api } = await fake(() => textOf('[true, false, true]'))
     try {
       const items = [
-        { sub: 'nosurf', title: 'Post A', people: [person(1), person(2, 'suggestion', { tentative: true }), person(3, 'suggestion', { tentative: true })] },
+        { sub: 'nosurf', title: 'Post A', body: 'Opal review', people: [person(1), person(2, 'suggestion', { tentative: true }), person(3, 'opinion', { tentative: true })] },
         { sub: 'nosurf', title: 'Post B', people: [person(4, 'suggestion', { tentative: true })] },
       ]
       const lines = []
@@ -185,10 +187,10 @@ for (const [name, cfgOf, textOf] of [['Groq', groq, groqText], ['Grok (xAI)', xa
       assert.equal(seen.length, 1, 'one request for all of them')
       assert.equal(systemOf(seen[0].body), JUDGE_SYSTEM)
       assert.deepEqual(JSON.parse(userOf(seen[0].body)), [
-        { subreddit: 'nosurf', post: 'Post A', comment: 'Comment 2 about quitting scrolling' },
-        { subreddit: 'nosurf', post: 'Post A', comment: 'Comment 3 about quitting scrolling' },
-        { subreddit: 'nosurf', post: 'Post B', comment: 'Comment 4 about quitting scrolling' },
-      ])
+        { subreddit: 'nosurf', post: 'Post A. Opal review', comment: 'Comment 2 about quitting scrolling' },
+        { subreddit: 'nosurf', post: 'Post A. Opal review', comment: 'Comment 3 about quitting scrolling' },
+        { subreddit: 'nosurf', post: 'Post B.', comment: 'Comment 4 about quitting scrolling' },
+      ], 'each comment is judged against what its post is about')
       assert.ok(lines.some((l) => l.includes(`${name} checked the suggestions: 2 kept, 1 dropped`)))
     } finally { server.close() }
   })

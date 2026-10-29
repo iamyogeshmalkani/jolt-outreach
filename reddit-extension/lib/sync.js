@@ -2,12 +2,12 @@
 // merges what is on GitHub into what it has, then writes the combined result back, so two devices working at once both keep their changes.
 export const SYNC_FILE = 'reddit-state.json'
 export const MAX_ITEMS = 250 // keeps the file well under GitHub's 1 MB limit for reading through the API
-export const MAX_SEEN = 3000
 
 // What stays on each device and is never written to GitHub: keys, tokens and test overrides.
 export const LOCAL_ONLY = ['aiKey', 'xaiKey', 'syncRepo', 'syncToken', 'syncApi', 'redditBase', 'aiApi']
 const SYNCED_SETTINGS = ['subs', 'period', 'postsPerSub', 'minComments', 'minScore', 'skip', 'provider', 'model', 'useAi', 'name', 'offer', 'body', 'subject']
 
+import { MAX_SEEN } from './memory.js'
 import { upgradeItem } from './rules.js'
 
 // Each thing people change on their own carries the time it was last changed: the reply to a post, and the message to each person on it.

@@ -128,7 +128,7 @@ function renderDetail(it) {
     const prev = idx >= 1 && idx <= 3 ? { label: PREV[idx - 1], to: STATUSES[idx - 1] } : null
     const who = esc(key(p))
     return `<section>
-        <h3>${p.why === 'suggestion' ? 'Message someone who gave a suggestion' : 'Message the top commenter'} <span class="pill">${esc(p.dmStatus)}</span></h3>
+        <h3>${esc({ suggestion: 'Message someone who gave a suggestion', opinion: 'Message someone who shared an opinion' }[p.why] ?? 'Message the top commenter')} <span class="pill">${esc(p.dmStatus)}</span></h3>
         <p class="meta"><a href="https://www.reddit.com/user/${encodeURIComponent(p.author)}/" target="_blank" rel="noopener">u/${esc(p.author)}</a>, ${p.score} upvotes${p.url ? `, <a href="${esc(p.url)}" target="_blank" rel="noopener">their comment</a>` : ''}</p>
         <blockquote>${esc(p.body)}</blockquote>
         <textarea data-edit="dm" data-p="${who}" rows="6" aria-label="Your message to u/${esc(p.author)}">${esc(dmText(p))}</textarea>

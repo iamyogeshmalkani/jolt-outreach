@@ -4,6 +4,7 @@ import { find } from './lib/finder.js'
 import { draft, judge } from './lib/ai.js'
 import { reddit } from './lib/reddit.js'
 import { parseSubs, settle, upgradeItem } from './lib/rules.js'
+import { buildKnown, remember } from './lib/memory.js'
 import { MAX_ITEMS, syncFromSettings } from './lib/sync.js'
 import { normalize } from './lib/settings.js'
 
@@ -40,11 +41,8 @@ async function run() {
     if (await syncFromSettings(store, s)) await log('Synced with your other devices.')
 
     const { items: existing = [], seen = {} } = await store.get(['items', 'seen'])
-    const known = {
-      posts: new Set([...(seen.posts || []), ...existing.map((i) => i.id)]),
-      authors: new Set([...(seen.authors || []), ...existing.map(upgradeItem).flatMap((i) => i.people.map((p) => p.author.toLowerCase()))]),
-    }
-    const { items, stopped } = await find(reddit(s.redditBase), s, known, log, pause) // `redditBase` is only set by tests
+    const known = buildKnown(existing, seen)
+    const { items, stopped, stats } = await find(reddit(s.redditBase), s, known, log, pause) // `redditBase` is only set by tests
     const ai = s.aiKey && s.useAi ? { provider: s.provider, key: s.aiKey.trim(), model: s.model, ...(s.aiApi ? { api: s.aiApi } : {}) } : null // `aiApi` is only set by tests
     if (ai && items.length) await judge(ai, items, log) // keep only the suggesters the AI agrees give a suggestion or review
     settle(items, s.suggesters, known.authors) // best few per post, nobody twice
@@ -55,10 +53,7 @@ async function run() {
     const ids = new Set(items.map((i) => i.id))
     await store.set({
       items: [...items, ...current.map(upgradeItem).filter((i) => !ids.has(i.id))].slice(0, MAX_ITEMS),
-      seen: {
-        posts: [...known.posts, ...ids].slice(-3000),
-        authors: [...known.authors, ...items.flatMap((i) => i.people.map((p) => p.author.toLowerCase()))].slice(-3000),
-      },
+      seen: remember(known, items),
     })
 
     if (await syncFromSettings(store, s)) await log('Shared the new posts with your other devices.')
@@ -67,7 +62,16 @@ async function run() {
 
     const found = items.length
     if (stopped) await patchStatus({ error: stopped, message: found ? `Saved ${found} posts before stopping.` : '' })
-    else await patchStatus({ message: found ? `Found ${found} posts.` : 'Nothing new found this time.' })
+    else {
+      const old = stats.alreadySeen ? ` ${stats.alreadySeen} posts you have already seen were skipped.` : ''
+      await patchStatus({
+        message: found
+          ? `Found ${found} new posts.${old}`
+          : stats.alreadySeen
+            ? `Nothing new: the top posts there are ones you have already seen (${stats.alreadySeen}). Try a longer period, or more subreddits.`
+            : 'Nothing new found this time.',
+      })
+    }
     await patchStatus({ lastRun: { at: Date.now(), found } })
     chrome.action.setBadgeBackgroundColor({ color: '#b5fc4f' })
     chrome.action.setBadgeText({ text: found ? String(found) : '' })

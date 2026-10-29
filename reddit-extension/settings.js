@@ -1,4 +1,5 @@
 import { PROVIDERS, check, providerOf } from './lib/ai.js'
+import { memoryCounts } from './lib/memory.js'
 import { getJson, RedditError } from './lib/reddit.js'
 import { parseSubs } from './lib/rules.js'
 import { DEFAULTS, normalize } from './lib/settings.js'
@@ -17,6 +18,11 @@ async function stored() {
 
 async function load() {
   const s = await stored()
+  const { items = [], seen = {} } = await chrome.storage.local.get(['items', 'seen'])
+  const m = memoryCounts(items, seen)
+  $('memory').textContent = m.posts
+    ? `Remembered so far: ${m.posts} posts and ${m.people} people. None of them is ever offered again, on this device or on any device you sync with. Skipping someone counts too.`
+    : 'Posts and people you have been shown are remembered, and never offered again.'
   for (const k of FIELDS) $(k).value = s[k]
   $('useAi').checked = s.useAi
   explainProvider()

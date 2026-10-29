@@ -114,7 +114,7 @@ def main():
         time.sleep(3)
         def check(g1, where):
             who = {p["author"]: p["dmStatus"] for p in g1["people"]}
-            assert who == {"alice": "Sent", "helper": "Skip"} and g1["commentStatus"] == "Posted", (where, who, g1["commentStatus"])
+            assert who == {"alice": "Sent", "helper": "Skip", "opiner": "To send"} and g1["commentStatus"] == "Posted", (where, who, g1["commentStatus"])
         for name, sw in (("A", swA), ("B", swB)):
             check(items_of(sw)["g1"], name)
         check({i["id"]: i for i in remote()["items"]}["g1"], "GitHub")

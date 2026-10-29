@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { makeItem, parseSubs, parseUsers, pending, pickPeople, postProblem, ruleFlags, settle, suggestionStrength, upgradeItem } from '../lib/rules.js'
+import { makeItem, opinionStrength, parseSubs, parseUsers, pending, pickPeople, postProblem, reaction, ruleFlags, settle, suggestionStrength, upgradeItem } from '../lib/rules.js'
 import { comment, post, rules } from './fixtures.mjs'
 
 test('reads subreddit names however they are typed', () => {
@@ -173,4 +173,50 @@ test('a post needs attention until every message and the reply are dealt with', 
   assert.equal(pending(it(['Sent'], 'To post')), true)
   assert.equal(pending(it([], 'To post')), true, 'a post with nobody to message only needs the reply')
   assert.equal(pending(it([], 'Skip')), false)
+})
+
+test('praise, criticism and opinions count when they are about what the post is about', () => {
+  const post = 'Opal app review: does the focus blocker actually reduce your screen time? I have been testing it for a month.'
+  const about = [
+    'Honestly I love how Opal blocks my feed apps, my screen time dropped by half and I feel much calmer in the evenings.',
+    "I think the focus blocker is overrated, it is too easy to bypass and I just turned it off after a week of using it.",
+    "It's honestly the best thing I've tried for my screen time, personally I would not go back to how it was before.",
+  ]
+  for (const t of about) assert.ok(opinionStrength(t, post) > 0, t)
+  const unrelated = [
+    'Honestly I love pizza, I think the best toppings are mushrooms and onions and I will never change my mind on this.',
+    'I think my dog is the best companion anyone could ask for, he is amazing and I love him to bits every single day.',
+  ]
+  for (const t of unrelated) assert.equal(opinionStrength(t, post), 0, t)
+  assert.equal(opinionStrength('I love it', post), 0, 'too short to say anything')
+  assert.equal(opinionStrength('This is the way the blocker works for most people I know at the moment, nothing more.', post), 0, 'no opinion in it')
+})
+
+test('a comment is labelled a suggestion when it recommends something, and an opinion when it only gives a take', () => {
+  const post = 'Opal app review: does the focus blocker actually reduce your screen time?'
+  assert.equal(reaction('I recommend Opal. It blocks the apps I choose until my work is done, and that worked for me for months.', post).why, 'suggestion')
+  assert.equal(reaction('Honestly I love how the focus blocker keeps my screen time down, I feel much calmer in the evenings now.', post).why, 'opinion')
+  assert.equal(reaction('lol same, mine is always over six hours and I am not even ashamed of it anymore to be honest', post), null)
+})
+
+test('picks people who react to the post, including ones who only share an opinion, and leaves out unrelated chatter', () => {
+  const postText = 'Opal app review: does the focus blocker actually reduce your screen time? I have been testing it for a month.'
+  const children = [
+    comment({ author: 'top_voice', body: 'This is exactly how I feel about my phone every single evening lately.', score: 500 }),
+    comment({ author: 'fan', body: 'Honestly I love how Opal blocks my feed apps, my screen time dropped by half and I feel much calmer.', score: 80 }),
+    comment({ author: 'critic', body: 'I think the focus blocker is overrated, it is too easy to bypass and I turned it off after a week.', score: 60 }),
+    comment({ author: 'offtopic', body: 'Honestly I love pizza, I think the best toppings are mushrooms and onions and I will never change.', score: 70 }),
+    comment({ author: 'helper', body: 'I recommend Opal for this. It blocks the apps I choose until my work is done, and it worked for me.', score: 20 }),
+  ]
+  const { top, suggesters } = pickPeople(children, { postAuthor: 'op', postText, wantSuggesters: 2 })
+  assert.equal(top.author, 'top_voice')
+  const byName = Object.fromEntries(suggesters.map((c) => [c.author, c.why]))
+  assert.deepEqual(byName, { helper: 'suggestion', fan: 'opinion', critic: 'opinion' })
+  assert.ok(!('offtopic' in byName))
+})
+
+test('an opinion gets its own wording for the fallback opening line', () => {
+  const item = makeItem(post().data, { top: null, suggesters: [{ author: 'fan', body: 'Honestly I love how it keeps my screen time down every single day now.', score: 3, url: 'u', why: 'opinion', strength: 2 }] }, [])
+  assert.equal(item.people[0].why, 'opinion')
+  assert.match(item.people[0].opener, /^Saw your thoughts on r\/nosurf about “Honestly I love/)
 })

@@ -7,6 +7,7 @@ export async function find(api, s, known, log = async () => {}, pause = async ()
   const skipUsers = parseUsers(s.skip)
   for (const a of known.authors) skipUsers.add(a)
   const items = []
+  const stats = { kept: 0, alreadySeen: 0 }
   let stopped = ''
   try {
     for (const sub of subs) {
@@ -32,7 +33,10 @@ export async function find(api, s, known, log = async () => {}, pause = async ()
       let kept = 0
       for (const post of posts) {
         if (kept >= s.postsPerSub) break
-        if (known.posts.has(post.id)) continue
+        if (known.posts.has(post.id)) {
+          stats.alreadySeen++
+          continue
+        }
         const why = postProblem(post, s)
         if (why) {
           skipped[why] = (skipped[why] || 0) + 1
@@ -40,19 +44,20 @@ export async function find(api, s, known, log = async () => {}, pause = async ()
         }
         await pause()
         const children = await api.comments(post.id)
-        const picked = pickPeople(children, { postAuthor: post.author, skipUsers, wantSuggesters: s.suggesters })
+        const picked = pickPeople(children, { postAuthor: post.author, postText: `${post.title} ${post.selftext || ''}`, skipUsers, wantSuggesters: s.suggesters })
         if (picked.top) skipUsers.add(picked.top.author.toLowerCase()) // one message per person per run
         items.push(makeItem(post, picked, flags))
         kept++
       }
       const why = Object.entries(skipped).map(([k, n]) => `${n} ${k}`).join(', ')
-      await log(`r/${sub}: ${kept} posts kept${why ? ` (skipped ${why})` : ''}${flags.length ? '; its rules mention: ' + flags.join(', ') : ''}`)
+      stats.kept += kept
+      await log(`r/${sub}: ${kept} new posts kept${why ? ` (skipped ${why})` : ''}${flags.length ? '; its rules mention: ' + flags.join(', ') : ''}`)
       await pause()
     }
   } catch (e) {
     if (!(e instanceof RedditError)) throw e
     stopped = e.message
   }
-  return { items, stopped }
+  return { items, stopped, stats }
 }
 

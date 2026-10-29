@@ -43,7 +43,9 @@ COMMENTS = {
     "g1": [c("AutoModerator", "Please read the rules before you post in this community, thanks."), c("op_user", "Thank you all so much for the replies and the advice."),
            c("alice", "Grayscale plus a charger outside the bedroom changed my evenings completely.", 120),
            c("asker", "Does anyone know how to stop scrolling at night? I really cannot stop and it is getting worse.", 70),
-           c("helper", "I recommend Opal. It blocks the apps I choose until my work is done, and that worked for me for months.", 20)],
+           c("helper", "I recommend Opal. It blocks the apps I choose until my work is done, and that worked for me for months.", 20),
+           c("opiner", "Honestly I love how much calmer my evenings are since I started cutting my phone time, it is really great.", 10),
+           c("offtopic", "Honestly I love pizza, I think the best toppings are mushrooms and onions and I will never change my mind.", 9)],
     "g2": [c("bob", "Logging out of everything every night adds just enough friction to matter.", 80)],
     "d1": [c("carol", "I deleted the feed apps and kept only messaging, and it helped a lot.", 60)],
 }
@@ -103,7 +105,7 @@ class Fake(BaseHTTPRequestHandler):
             return self._send(200, {"choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": "OK"}}]})
         asked = json.loads(user)
         if "screen Reddit comments" in system:  # confirm who really gives a suggestion
-            text = json.dumps(["recommend" in x["comment"] for x in asked])
+            text = json.dumps(["recommend" in x["comment"] or "love" in x["comment"] for x in asked])
         else:
             text = json.dumps([GOOD_REPLY if "write replies to Reddit posts" in system else f"Your point about quitting scrolling really landed ({i})." for i in range(len(asked))])
         self._send(200, {"choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": text, "reasoning": "..."}}]})
@@ -189,13 +191,13 @@ def main():
         by_id = {i["id"]: i for i in items}
         assert sorted(by_id) == ["d1", "g1", "g2"], (sorted(by_id), sw.evaluate("chrome.storage.local.get(['status','log','settings'])"))  # pinned, adult and private-subreddit posts are skipped
         people = {k: [(p["author"], p["why"]) for p in v["people"]] for k, v in by_id.items()}
-        assert people == {"g1": [("alice", "top"), ("helper", "suggestion")], "g2": [("bob", "top")], "d1": [("carol", "top")]}, people
+        assert people == {"g1": [("alice", "top"), ("opiner", "opinion"), ("helper", "suggestion")], "g2": [("bob", "top")], "d1": [("carol", "top")]}, people
         assert all("tentative" not in p and "verdict" not in p for i in items for p in i["people"])
         assert by_id["g1"]["flags"] == ["No self-promotion"] and by_id["d1"]["flags"] == []
         assert all(i["comment"] == GOOD_REPLY for i in items)
         assert all(p["opener"].startswith("Your point about quitting scrolling") for i in items for p in i["people"]), [p["opener"] for i in items for p in i["people"]]
         log = sw.evaluate("chrome.storage.local.get('log').then(r => r.log.join('\\n'))")
-        assert "r/privatesub: private or restricted, skipped" in log and "Groq wrote 3 replies and 4 opening lines" in log and "Groq checked the suggestions: 1 kept, 0 dropped" in log, log
+        assert "r/privatesub: private or restricted, skipped" in log and "Groq wrote 3 replies and 5 opening lines" in log and "Groq checked the suggestions: 2 kept, 0 dropped" in log, log
         print("run ok:", sorted(by_id), "| people:", people)
 
         # 4. the dashboard
@@ -205,8 +207,10 @@ def main():
         assert dash.locator(".row").count() == 3
         dash.locator(".row", has_text="Post g1").click()
         assert "No self-promotion" in dash.inner_text(".warn"), "the rules warning shows"
-        assert dash.locator('[data-edit="dm"]').count() == 2, "one message box for the top commenter and one for the suggestion-giver"
-        assert "gave a suggestion" in dash.inner_text("main") and "top commenter" in dash.inner_text("main")
+        assert dash.locator('[data-edit="dm"]').count() == 3, "a message box each for the top commenter, the suggestion-giver and the person with an opinion"
+        text = dash.inner_text("main")
+        assert "gave a suggestion" in text and "top commenter" in text and "shared an opinion" in text
+        assert "pizza" not in text, "an opinion about something else is not offered"
         dm = dash.input_value('[data-edit="dm"][data-p="alice"]')
         assert dm.startswith("Your point about quitting scrolling") and "I'm Isha from Jolt" in dm and "a year of Jolt Premium" in dm, dm
         href = dash.locator("section", has_text="u/alice").locator("a.button.primary").get_attribute("href")
@@ -225,6 +229,8 @@ def main():
         time.sleep(0.4)
         assert dash.locator(".row").count() == 3, "still in To do: the suggestion-giver has not been dealt with"
         dash.click('button[data-p="helper"][data-set="Skip"]')
+        assert dash.locator(".row").count() == 3, "one person still to deal with"
+        dash.click('button[data-p="opiner"][data-set="Skip"]')
         time.sleep(0.5)
         saved = {i["id"]: i for i in sw.evaluate("chrome.storage.local.get('items').then(r => r.items)")}
         people_g1 = {p["author"]: p for p in saved["g1"]["people"]}
@@ -250,7 +256,13 @@ def main():
         again = sw.evaluate("chrome.storage.local.get('items').then(r => r.items)")
         assert sorted(i["id"] for i in again) == ["d1", "g1", "g2"], "nothing new to add"
         assert len(again) == 3
-        print("second run: nothing repeated")
+        message = sw.evaluate("chrome.storage.local.get('status').then(r => r.status.message)")
+        assert "already seen" in message and "(3)" in message, message
+        st.reload()
+        until(st, "document.getElementById('memory').textContent.includes('Remembered')")
+        assert "3 posts and 5 people" in st.inner_text("#memory"), st.inner_text("#memory")
+        print("second run: nothing repeated.", message)
+        print("settings page:", st.inner_text("#memory")[:60], "...")
 
         # 7. Reddit blocking the request is reported clearly and nothing is lost
         MODE["blocked"] = True

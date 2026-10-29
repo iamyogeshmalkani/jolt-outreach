@@ -105,12 +105,19 @@ dashboard, when you come back to the dashboard tab, and with **Sync now**.
   message template do sync, and the most recently saved version wins.
 - **It keeps the newest 250 posts.** Older ones drop off, on every device.
 
-- **People who give suggestions or reviews.** Besides the top commenter, it looks for other commenters who
-  recommend something, give a tip or say what worked for them (default 2 per post, 0 turns it off in
-  Settings). It finds them by the way they write ("I recommend", "what worked for me", "you should try"),
-  and if an AI key is set, the AI confirms each one, so questions, jokes and venting are dropped. Each person
-  gets their own message, edit box and status. A post stays in **To do** until every person on it and the
-  reply are dealt with.
+- **People who react to what the post is about.** Besides the top commenter, it looks for other commenters
+  who praise, criticise, review or recommend what the post is about, give a tip, or share their own take or
+  experience (default 2 per post, 0 turns it off in Settings). If the post is about a product or an idea, a
+  comment only counts if it is about that same thing: it has to share real words with the post, and if an AI
+  key is set, the AI checks each comment against the post's subject and drops questions, jokes, off-topic
+  opinions and simple agreement. Without a key it goes by how people write and the shared words. Each person
+  gets their own message (worded for a suggestion or for an opinion), edit box and status. A post stays in
+  **To do** until every person on it and the reply are dealt with.
+- **Nothing is offered twice.** Every post that was kept and every person who was offered is remembered, and
+  never offered again, across runs, across devices (it syncs), and even after old posts drop off the list.
+  Skipping someone counts, and so does anyone on your skip list in Settings. Settings shows how many posts
+  and people are remembered. A run says how many already-seen posts it skipped, and says so when everything
+  at the top of a subreddit has been seen: try a longer period or more subreddits.
 - **The top commenter** is the highest-scoring top-level comment from a real person. It skips the poster,
   moderators, bots, deleted comments, links, anyone who looks under 18, and sensitive topics. Posts that
   are pinned, adult, locked or about sensitive subjects are skipped too.

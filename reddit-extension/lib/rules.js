@@ -82,14 +82,50 @@ export function suggestionStrength(body) {
   return hits + (SUGGESTION_TOPICS.test(body) ? 1 : 0) + (body.length > 200 ? 1 : 0)
 }
 
-// The top commenter, plus (if `wantSuggesters` is above 0) a few other commenters who look like they are giving a suggestion or review.
+// Language of someone praising, criticising or giving their take on something.
+const OPINION_PHRASES = [
+  /\bi (really |absolutely |totally |honestly )?(love|like|enjoy|hate|dislike|prefer|adore|appreciate)\b/i,
+  /\bi (think|feel|believe|find|reckon|disagree|agree)\b/i,
+  /\b(in my (opinion|experience)|imo|imho|honestly|personally|to me)\b/i,
+  /\b(it'?s|it is|this is|that'?s|they'?re|these are) (so |really |very |super |pretty |quite |way |just )?(great|good|amazing|awesome|terrible|awful|bad|useless|overrated|underrated|worthless|brilliant|helpful|powerful|impressive|disappointing|nice|fantastic|annoying)\b/i,
+  /\b(not worth|worth (it|the|every)|waste of|overhyped|can'?t live without|changed my life|so much (better|calmer|easier|worse))\b/i,
+  /\b(pros?|cons?|downside|upside|drawback|benefit|advantage)\b/i,
+]
+
+// Words too common to show that a comment is about the same thing as a post.
+const COMMON = new Set(('about after again also and any are because been before being but can could did does doing dont down each even every for from get got had has have having here him how into its just like make many more most much not now off one only other our out over really same she should some such than that the their them then there these they this those through too under until very was way were what when where which while who why will with would you your').split(' '))
+const wordsOf = (t) => new Set((String(t || '').toLowerCase().match(/[a-z]{4,}/g) || []).filter((w) => !COMMON.has(w)))
+const sharedWords = (a, b) => {
+  const wa = wordsOf(a)
+  return [...wordsOf(b)].filter((w) => wa.has(w)).length
+}
+
+// An opinion only counts if it is about what the post is about, so it must share real words with the post.
+export function opinionStrength(body, postText) {
+  if ((body || '').length < 60) return 0
+  const hits = OPINION_PHRASES.filter((rx) => rx.test(body)).length
+  if (!hits) return 0
+  const shared = sharedWords(postText, body)
+  if (!shared) return 0
+  return hits + (shared >= 2 ? 1 : 0) + (body.length > 200 ? 1 : 0)
+}
+
+// Does the comment give a suggestion, a review, praise or an opinion about the post's subject? How strongly, and which kind?
+export function reaction(body, postText) {
+  const suggestion = suggestionStrength(body)
+  const opinion = opinionStrength(body, postText)
+  if (!suggestion && !opinion) return null
+  return { strength: Math.max(suggestion, opinion), why: suggestion >= opinion ? 'suggestion' : 'opinion' }
+}
+
+// The top commenter, plus (if `wantSuggesters` is above 0) a few other commenters who look like they are giving a suggestion, a review, praise or an opinion about the post's subject.
 // The suggesters are tentative: they can be confirmed by the AI and are trimmed to the wanted number later by settle().
-export function pickPeople(children, { postAuthor = '', skipUsers = new Set(), wantSuggesters = 0 } = {}) {
+export function pickPeople(children, { postAuthor = '', postText = '', skipUsers = new Set(), wantSuggesters = 0 } = {}) {
   const usable = (children || []).map((c) => usableComment(c, { postAuthor, skipUsers })).filter(Boolean)
   const [top, ...rest] = usable
   const suggesters = wantSuggesters > 0
     ? rest
-        .map((c) => ({ ...c, strength: suggestionStrength(c.body) }))
+        .map((c) => ({ ...c, ...reaction(c.body, postText) }))
         .filter((c) => c.strength > 0)
         .sort((x, y) => y.strength - x.strength || y.score - x.score)
         .slice(0, wantSuggesters * 2)
@@ -117,9 +153,9 @@ export function makePerson(c, why, sub) {
     body: c.body,
     score: c.score,
     url: c.url,
-    why, // 'top' (the highest-scoring comment) or 'suggestion' (someone giving a recommendation or review)
+    why, // 'top' (the highest-scoring comment), 'suggestion' (a recommendation or review) or 'opinion' (praise, criticism or a take on the post's subject)
     ...(c.strength ? { strength: c.strength } : {}),
-    opener: `Saw your ${why === 'suggestion' ? 'suggestion' : 'comment'} on r/${sub} about “${snippet(c.body, 60)}”.`,
+    opener: `Saw your ${{ suggestion: 'suggestion', opinion: 'thoughts' }[why] ?? 'comment'} on r/${sub} about “${snippet(c.body, 60)}”.`,
     dmStatus: 'To send',
     dmAt: 0, // when this person's message was last changed: syncing keeps the newest
   }
@@ -137,7 +173,7 @@ export function makeItem(post, { top = null, suggesters = [] } = {}, flags = [],
     flags,
     people: [
       ...(top ? [makePerson(top, 'top', post.subreddit)] : []),
-      ...suggesters.map((c) => ({ ...makePerson(c, 'suggestion', post.subreddit), tentative: true })),
+      ...suggesters.map((c) => ({ ...makePerson(c, c.why ?? 'suggestion', post.subreddit), tentative: true })),
     ],
     comment: '',
     commentStatus: 'To post',
