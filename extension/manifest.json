@@ -1,11 +1,26 @@
 {
   "manifest_version": 3,
   "name": "Jolt finder",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Finds people on TikTok who describe their own screen-time struggle, and publishes them to your Jolt outreach page.",
-  "permissions": ["storage", "alarms", "scripting"],
-  "host_permissions": ["https://www.tiktok.com/*", "https://api.github.com/*", "https://api.anthropic.com/*", "https://api.groq.com/*"],
-  "background": { "service_worker": "background.js", "type": "module" },
-  "action": { "default_popup": "popup.html", "default_title": "Jolt finder" },
+  "permissions": [
+    "storage",
+    "alarms",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://www.tiktok.com/*",
+    "https://api.github.com/*",
+    "https://api.anthropic.com/*",
+    "https://api.groq.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Jolt finder"
+  },
   "options_page": "options.html"
 }

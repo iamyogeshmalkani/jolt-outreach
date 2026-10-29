@@ -98,7 +98,7 @@ MINOR = re.compile(
     r"high ?school|middle ?school|\bgrade \d+|\d+(st|nd|rd|th) grade|freshman|sophomore|"
     r"my (mom|mum|dad|parents)|i'?m (1[0-7])\b|\b1[0-7] ?(yo|y/o|years? old)|homework|teacher", re.I)
 SENSITIVE = re.compile(
-    r"suicid|kill myself|self.?harm|cutting|anorex|bulimi|eating disorder|overdose|medicat|\bmeds\b|"
+    r"suicid|kill myself|self.?harm|cutting myself|cut myself|cutting my (wrists?|arms?|legs?|thighs?|skin)|anorex|bulimi|eating disorder|overdose|medicat|\bmeds\b|"
     r"therap|trauma|abus|depress|anxiety|panic|ptsd|bipolar|numb myself|\bcope\b|coping", re.I)
 SEXUAL = re.compile(r"\b(sex|nsfw|onlyfans|nude|horny)\b", re.I)
 BRAND_HANDLE = re.compile(r"(app|official|\.io|promo|deals|steals|coupon|bot|shop|store|ugc|agency)", re.I)

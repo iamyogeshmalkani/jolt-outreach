@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Jolt Reddit finder</title>
+    <link rel="stylesheet" href="ui.css" />
+  </head>
+  <body class="dash">
+    <header class="bar">
+      <h1><i class="mark"></i>Jolt Reddit finder</h1>
+      <div class="bar-end">
+        <button id="find" class="primary">Find top posts</button>
+        <a id="settings" href="#">Settings</a>
+        <span id="runstate" class="hint" role="status"></span>
+      </div>
+    </header>
+    <div id="app" class="app">
+      <aside class="queue">
+        <div id="chips" class="chips"></div>
+        <label class="pick"><span class="sr">Subreddit</span><select id="subfilter"></select></label>
+        <ul id="rows" class="rows"></ul>
+      </aside>
+      <main id="detail" class="detail"></main>
+    </div>
+    <script type="module" src="dashboard.js"></script>
+  </body>
+</html>

@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Jolt Reddit finder settings</title>
+    <link rel="stylesheet" href="ui.css" />
+  </head>
+  <body class="options">
+    <h1><i class="mark"></i>Jolt Reddit finder settings</h1>
+
+    <section>
+      <h2>Where to look</h2>
+      <label>Subreddits
+        <textarea id="subs" rows="3" placeholder="nosurf, digitalminimalism, phoneaddiction"></textarea>
+      </label>
+      <p class="hint">Separate them with commas, spaces or new lines. Typing r/ in front is optional.</p>
+      <div class="row">
+        <label>Top posts of the
+          <select id="period"><option value="day">day</option><option value="week">week</option><option value="month">month</option></select>
+        </label>
+        <label>Posts per subreddit <input id="postsPerSub" type="number" min="1" max="10" /></label>
+      </div>
+      <div class="row">
+        <label>At least this many comments <input id="minComments" type="number" min="0" /></label>
+        <label>At least this many upvotes <input id="minScore" type="number" min="0" /></label>
+      </div>
+      <label>Users to skip (already contacted)
+        <textarea id="skip" rows="2" placeholder="one username per line"></textarea>
+      </label>
+      <div class="row"><button id="testReddit" class="secondary">Test Reddit</button><span id="redditMsg" role="status"></span></div>
+    </section>
+
+    <section>
+      <h2>The message to the top commenter</h2>
+      <div class="row">
+        <label>Your first name <input id="name" /></label>
+        <label>What they get <input id="offer" /></label>
+      </div>
+      <label>Message. {NAME} and {OFFER} fill in. The first line comes from their comment.
+        <textarea id="body" rows="4"></textarea>
+      </label>
+      <label>Subject. {SUB} fills in the subreddit.
+        <input id="subject" />
+      </label>
+    </section>
+
+    <section>
+      <h2>Drafts written by Grok (optional)</h2>
+      <label>xAI API key
+        <input id="xaiKey" type="password" autocomplete="off" />
+      </label>
+      <label>Model <span class="hint">(leave empty for the default)</span>
+        <input id="model" autocomplete="off" />
+      </label>
+      <label class="check"><input id="useAi" type="checkbox" /> Use Grok to draft replies and opening lines</label>
+      <p class="hint">
+        Get a key at console.x.ai and check there what your free quota covers. Without a key, or if a request fails,
+        you get a built-in opening line and no reply draft. The key stays in this Chrome and is only sent to xAI.
+        Only the text of posts and comments is sent.
+      </p>
+      <div class="row"><button id="testGrok" class="secondary">Test Grok</button><span id="grokMsg" role="status"></span></div>
+    </section>
+
+    <div class="row">
+      <button id="save" class="primary">Save</button>
+      <span id="msg" role="status"></span>
+    </div>
+    <script type="module" src="settings.js"></script>
+  </body>
+</html>

@@ -7,7 +7,7 @@ export const STRUGGLE =
 export const MINOR =
   /high ?school|middle ?school|\bgrade \d+|\d+(st|nd|rd|th) grade|freshman|sophomore|my (mom|mum|dad|parents)|i'?m (1[0-7])\b|\b1[0-7] ?(yo|y\/o|years? old)|homework|teacher/i
 export const SENSITIVE =
-  /suicid|kill myself|self.?harm|cutting|anorex|bulimi|eating disorder|overdose|medicat|\bmeds\b|therap|trauma|abus|depress|anxiety|panic|ptsd|bipolar|numb myself|\bcope\b|coping/i
+  /suicid|kill myself|self.?harm|cutting myself|cut myself|cutting my (wrists?|arms?|legs?|thighs?|skin)|anorex|bulimi|eating disorder|overdose|medicat|\bmeds\b|therap|trauma|abus|depress|anxiety|panic|ptsd|bipolar|numb myself|\bcope\b|coping/i
 export const SEXUAL = /\b(sex|nsfw|onlyfans|nude|horny)\b/i
 export const BRAND_HANDLE = /(app|official|\.io|promo|deals|steals|coupon|bot|shop|store|ugc|agency)/i
 // No "i" flag, on purpose: the code pattern only matches upper-case codes.

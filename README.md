@@ -62,6 +62,34 @@ sensible length. Anything that fails the check, or any error (wrong key, quota o
 no internet), quietly falls back to the built-in line, and the popup's log says why. A run never fails
 because of the AI.
 
+## The Reddit extension
+
+A second, separate extension for Reddit. For each subreddit you list, it finds the top posts, picks the
+top commenter on each, and drafts two things with Grok: a message to that commenter, and a reply you
+could post on the post. You send and post everything yourself.
+
+1. Download https://iamyogeshmalkani.github.io/jolt-outreach/jolt-reddit-extension.zip, unzip it and load
+   it on `chrome://extensions` (Developer mode, Load unpacked), the same way as the TikTok one.
+2. Log into Reddit in that Chrome.
+3. Open its **Settings**. Add your subreddits, choose how many posts, and paste a Grok key from
+   console.x.ai. Use **Test Reddit** and **Test Grok** to check both.
+4. Click the extension, choose **Find top posts**, then **Open dashboard**.
+
+In the dashboard, each post shows its top commenter and their comment, a message ready to send (the
+button opens Reddit's message form already filled in), and a reply draft. Everything stays in this Chrome.
+Nothing is uploaded to GitHub.
+
+- **The top commenter** is the highest-scoring top-level comment from a real person. It skips the poster,
+  moderators, bots, deleted comments, links, anyone who looks under 18, and sensitive topics. Posts that
+  are pinned, adult, locked or about sensitive subjects are skipped too.
+- **Check the rules first.** If a subreddit's rules mention promotion, surveys, research or DMs, the post
+  shows a warning. Read the rules and ask the moderators before you message or reply. Many communities
+  ban unsolicited messages, and Reddit users react badly to them.
+- **Replies are drafts.** Edit each one so it sounds like you. Don't post the same text twice.
+- **Reddit may block it.** Reddit refuses many automated requests. This reads public pages in your own
+  logged-in Chrome, and if Reddit blocks it, the popup says so. Open reddit.com once in that Chrome and try again.
+- **Run it sparingly.** A run makes a few dozen requests. Once or twice a day is plenty.
+
 ## What gets published
 
 The live page and the `data` branch are public. The `data` branch holds the TikTok handles and
@@ -111,6 +139,7 @@ touch real TikTok.
 
 ## Layout
 
+- `reddit-extension/` the Reddit extension (its tests: `npm run test:reddit`, and `test/e2e.py`)
 - `extension/` the Chrome extension (`lib/rules.js` filters, `lib/tasks.js` what a run does,
   `lib/pages.js` what is read from TikTok pages, `lib/github.js` saving, `lib/llm.js` the optional
   AI opening lines)

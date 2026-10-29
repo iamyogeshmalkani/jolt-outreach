@@ -30,6 +30,8 @@ jobs:
           VITE_REPO: ${{ github.repository }}
       - name: Add the Chrome extension download
         run: cd extension && zip -qr ../dist/jolt-finder-extension.zip . -x 'test/*' -x '*.DS_Store'
+      - name: Add the Reddit extension download
+        run: cd reddit-extension && zip -qr ../dist/jolt-reddit-extension.zip . -x 'test/*' -x '*.DS_Store'
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

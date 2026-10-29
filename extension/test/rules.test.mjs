@@ -18,6 +18,11 @@ test('keeps people describing their own struggle and drops the rest', () => {
   assert.deepEqual(kept, ['quitter1', 'stopped1', 'thumb1', 'loud'])
 })
 
+test('"cutting back" is a normal thing to say, self-harm is still filtered out', () => {
+  assert.equal(r.isCandidate('someone', 'I keep cutting back on my phone but I always end up scrolling again', 'creator'), true)
+  assert.equal(r.isCandidate('someone', 'I scroll my phone for hours and I have been cutting myself too', 'creator'), false)
+})
+
 test('never picks the video creator, and ignores empty or very long comments', () => {
   assert.equal(r.isCandidate('creator', 'I cannot stop scrolling on my phone at night', 'Creator'), false)
   assert.equal(r.isCandidate('', 'I cannot stop scrolling on my phone at night', 'x'), false)
