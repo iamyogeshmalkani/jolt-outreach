@@ -31,6 +31,8 @@ export const VIEWS: { label: string; at: number[] }[] = [
 
 // Button text for moving someone from status 0, 1 and 2 to the next one.
 export const NEXT_STEP = ['Mark as sent', 'They replied', 'Interview booked']
+// Button text for moving someone from status 1, 2 and 3 back to the one before it.
+export const PREV_STEP = ['Unmark as sent', 'Unmark replied', 'Unmark booked']
 
 export const DAILY_LIMIT = 25
 

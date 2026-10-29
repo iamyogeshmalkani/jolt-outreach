@@ -8,6 +8,7 @@
 import { LIMITS, QUERIES, isCandidate, makePerson, pickQueries, shuffled, todayIso } from './rules.js'
 
 export class Stop extends Error {}
+class AiError extends Error {}
 
 const creatorOf = (url) => (/\/@([^/]+)\/video/.exec(url) || [])[1] || ''
 
@@ -18,8 +19,10 @@ async function notOpened(browser, creator, info, log) {
 }
 
 // Looks through the comments of a few popular videos and collects people who describe their own struggle.
-export async function findPeople(browser, known, seen, log = async () => {}) {
-  const out = { people: [], stopped: '' }
+//   judge(rows) -> rows   the AI's pick of the comments that are really about the writer's own habit; it throws if it can't answer,
+//                         which ends the run (out.aiError) rather than saving comments nobody has checked
+export async function findPeople(browser, known, seen, log = async () => {}, judge) {
+  const out = { people: [], stopped: '', aiError: '' }
   const today = todayIso()
   const queries = pickQueries(QUERIES, LIMITS.peopleQueries)
   const perQuery = Math.ceil(LIMITS.peopleVideos / queries.length)
@@ -50,23 +53,37 @@ export async function findPeople(browser, known, seen, log = async () => {}) {
         }
         opened++
         fails = 0
-        let added = 0
-        for (const row of page.rows) {
+        const fresh = page.rows.filter((row) => {
           const key = row.handle.toLowerCase()
-          if (known.handles.has(key) || seen.handles.has(key) || !isCandidate(row.handle, row.text, creator)) continue
+          return !known.handles.has(key) && !seen.handles.has(key) && isCandidate(row.handle, row.text, creator)
+        })
+        let chosen = []
+        if (fresh.length) {
+          try {
+            chosen = await judge(fresh)
+          } catch (e) {
+            await browser.closeVideo()
+            throw new AiError(e.message)
+          }
+        }
+        let added = 0
+        for (const row of chosen) {
+          const key = row.handle.toLowerCase()
+          if (seen.handles.has(key)) continue // the same person can have two comments on one video
           seen.handles.add(key)
           out.people.push(makePerson(row, { creator, query, url: card.url }, today))
           added++
         }
-        await log(`@${creator}: ${page.rows.length} comments, ${added} new people`)
+        await log(`@${creator}: ${page.rows.length} comments, ${fresh.length} to check, ${added} about their own habit`)
         await browser.closeVideo()
         await browser.pause(2, 5)
       }
       await browser.pause()
     }
   } catch (e) {
-    if (!(e instanceof Stop)) throw e
-    out.stopped = e.message
+    if (e instanceof AiError) out.aiError = e.message
+    else if (e instanceof Stop) out.stopped = e.message
+    else throw e
   }
   out.people = out.people.slice(0, LIMITS.targetPeople)
   return out

@@ -10,6 +10,7 @@ const VIEWS = [
   { label: 'Done', has: (it) => !pending(it) && !['Sent', 'Replied', 'Booked'].includes(it.dmStatus) },
 ]
 const NEXT = ['Mark as sent', 'They replied', 'Interview booked']
+const PREV = ['Unmark as sent', 'Unmark replied', 'Unmark booked']
 
 const state = { items: [], settings: { ...DEFAULTS }, status: {}, view: 0, sub: '', selected: null }
 let mute = 0 // ignore the storage change caused by our own save, so typing is not interrupted
@@ -79,6 +80,7 @@ function renderDetail(it) {
   }
   const idx = STATUSES.indexOf(it.dmStatus)
   const next = idx <= 2 ? { label: NEXT[idx], to: STATUSES[idx + 1] } : null
+  const prev = idx >= 1 && idx <= 3 ? { label: PREV[idx - 1], to: STATUSES[idx - 1] } : null
   const flags = it.flags?.length
     ? `<p class="warn">r/${esc(it.sub)}'s rules mention: ${it.flags.map(esc).join(', ')}. Read them, and ask the moderators, before you message or reply.</p>`
     : ''
@@ -93,6 +95,7 @@ function renderDetail(it) {
             <a class="button ${idx === 0 ? 'primary' : 'secondary'}" href="${esc(dmUrl(it))}" target="_blank" rel="noopener">Open message on Reddit</a>
             <button class="secondary" data-copy="dm">Copy message</button>
             ${next ? `<button class="${idx === 0 ? 'secondary' : 'primary'}" data-set="${next.to}">${next.label}</button>` : '<span class="done">Interview booked.</span>'}
+            ${prev ? `<button class="quiet" data-set="${prev.to}">${prev.label}</button>` : ''}
             ${idx === 0 ? '<button class="quiet" data-set="Skip">Skip</button>' : ''}`}
           ${it.dmEdit !== undefined ? '<button class="quiet" data-restore="dm">Restore original</button>' : ''}
         </div>
@@ -109,7 +112,7 @@ function renderDetail(it) {
         ${text ? '<button class="secondary" data-copy="comment">Copy reply</button>' : ''}
         ${it.commentStatus === 'To post'
           ? `<button class="${text ? 'primary' : 'secondary'}" data-comment="Posted">Mark as posted</button><button class="quiet" data-comment="Skip">Skip</button>`
-          : `<button class="quiet" data-comment="To post">Undo</button>`}
+          : `<button class="quiet" data-comment="To post">${it.commentStatus === 'Skip' ? 'Put back' : 'Unmark as posted'}</button>`}
         ${it.commentEdit !== undefined ? '<button class="quiet" data-restore="comment">Restore original</button>' : ''}
       </div>
     </section>`

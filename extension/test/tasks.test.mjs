@@ -2,6 +2,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { Stop, findPeople } from '../lib/tasks.js'
 
+// Stands in for the AI: keeps the comments whose text contains "came back", as a person describing their own habit would.
+const judge = async (rows) => rows.filter((r) => /came back|cannot stop|stop scrolling/.test(r.text))
 const empty = () => ({ handles: new Set() })
 const seen = () => ({ handles: new Set() })
 const url = (n, who = 'maker' + n) => `https://www.tiktok.com/@${who}/video/${n}`
@@ -38,7 +40,7 @@ test('finds people from comments, skipping known handles and the creator', async
   ] } }
   const known = empty()
   known.handles.add('known1')
-  const out = await findPeople(fakeBrowser({ cards, comments }), known, seen())
+  const out = await findPeople(fakeBrowser({ cards, comments }), known, seen(), undefined, judge)
   assert.deepEqual([...new Set(out.people.map((p) => p.handle))], ['quitter1'])
   assert.equal(out.people[0].priority, 'A')
   assert.match(out.people[0].opener, /quitting/)
@@ -47,7 +49,7 @@ test('finds people from comments, skipping known handles and the creator', async
 test('gives up on a run after three videos whose comments will not load', async () => {
   const cards = [card(1), card(2), card(3), card(4), card(5)]
   const b = fakeBrowser({ cards })
-  const out = await findPeople(b, empty(), seen())
+  const out = await findPeople(b, empty(), seen(), undefined, judge)
   assert.equal(out.people.length, 0)
   assert.equal(opened(b).length, 3)
 })
@@ -58,7 +60,7 @@ test('says what is on the page when a video does not open, then moves on', async
   const comments = { [cards[1].url]: { ok: true, rows: [{ handle: 'quitter1', text: 'Quit again for a couple days but unfortunately came back to it.' }] } }
   const lines = []
   const b = fakeBrowser({ cards, videos, comments })
-  const out = await findPeople(b, empty(), seen(), async (l) => lines.push(l))
+  const out = await findPeople(b, empty(), seen(), async (l) => lines.push(l), judge)
   assert.ok(lines.some((l) => /did not open/.test(l) && /something-new, browse-music/.test(l)), lines.join('\n'))
   assert.equal(b.calls.filter(([k]) => k === 'close').length, opened(b).length, 'every opened video is closed again')
 })
@@ -67,14 +69,14 @@ test('reads comments from a video that has no caption', async () => {
   const cards = [card(1, '')]
   const videos = { [cards[0].url]: { opened: true, caption: '', likes: '1', comments: '40', markers: [] } }
   const comments = { [cards[0].url]: { ok: true, rows: [{ handle: 'quitter1', text: 'Quit again for a couple days but unfortunately came back to it.' }] } }
-  const out = await findPeople(fakeBrowser({ cards, videos, comments }), empty(), seen())
+  const out = await findPeople(fakeBrowser({ cards, videos, comments }), empty(), seen(), undefined, judge)
   assert.deepEqual([...new Set(out.people.map((x) => x.handle))], ['quitter1'])
 })
 
 test('stops cleanly on a verification check and keeps what it already found', async () => {
   const cards = [card(1), card(2), card(3)]
   const comments = Object.fromEntries(cards.map((c, i) => [c.url, { ok: true, rows: [{ handle: 'person' + i, text: 'Quit again for a couple days but unfortunately came back to it.' }] }]))
-  const out = await findPeople(fakeBrowser({ cards, comments, stopOnOpen: 2 }), empty(), seen())
+  const out = await findPeople(fakeBrowser({ cards, comments, stopOnOpen: 2 }), empty(), seen(), undefined, judge)
   assert.match(out.stopped, /verification/)
   assert.equal(out.people.length, 1)
 })
@@ -83,6 +85,47 @@ test('stops after the target number of people', async () => {
   const cards = [card(1), card(2), card(3), card(4)]
   const rows = Array.from({ length: 30 }, (_, i) => ({ handle: 'person' + i, text: 'Quit again for a couple days but unfortunately came back to it.' }))
   const comments = Object.fromEntries(cards.map((c) => [c.url, { ok: true, rows }]))
-  const out = await findPeople(fakeBrowser({ cards, comments }), empty(), seen())
+  const out = await findPeople(fakeBrowser({ cards, comments }), empty(), seen(), undefined, judge)
   assert.equal(out.people.length, 8)
+})
+
+test('only the comments the AI picks become people, and it sees only comments that passed the cheap checks', async () => {
+  const cards = [card(1, 'anything', 'creator')]
+  const comments = { [cards[0].url]: { ok: true, rows: [
+    { handle: 'quitter1', text: 'Quit again for a couple days but unfortunately came back to it.' },
+    { handle: 'joker1', text: 'my phone is my whole personality lol, this video is gold' },
+    { handle: 'teen1', text: "I'm 15 and I cannot stop scrolling at night" },
+    { handle: 'known1', text: 'I cannot stop scrolling my phone at night, it is so bad' },
+  ] } }
+  const known = empty()
+  known.handles.add('known1')
+  const sent = []
+  const spy = async (rows) => { sent.push(rows.map((r) => r.handle)); return judge(rows) }
+  const s = seen()
+  const out = await findPeople(fakeBrowser({ cards, comments }), known, s, undefined, spy)
+  assert.deepEqual(sent[0], ['quitter1', 'joker1']) // later calls are the second search returning the same video
+  assert.deepEqual(out.people.map((p) => p.handle), ['quitter1'])
+  assert.ok(!s.handles.has('joker1'), 'a comment the AI turned down is not remembered as seen')
+})
+
+test('one person with two accepted comments on a video is saved once', async () => {
+  const cards = [card(1)]
+  const comments = { [cards[0].url]: { ok: true, rows: [
+    { handle: 'twice', text: 'Quit again for a couple days but unfortunately came back to it.' },
+    { handle: 'twice', text: 'I cannot stop scrolling my phone at night, it is so bad' },
+  ] } }
+  const out = await findPeople(fakeBrowser({ cards, comments }), empty(), seen(), undefined, judge)
+  assert.equal(out.people.length, 1)
+})
+
+test('when the AI cannot answer, the run ends with its reason and saves nothing from that video', async () => {
+  const cards = [card(1), card(2)]
+  const comments = Object.fromEntries(cards.map((c) => [c.url, { ok: true, rows: [{ handle: 'p' + c.url.length, text: 'Quit again for a couple days but unfortunately came back to it.' }] }]))
+  const b = fakeBrowser({ cards, comments })
+  const out = await findPeople(b, empty(), seen(), undefined, async () => { throw new Error('Groq did not accept the API key.') })
+  assert.equal(out.aiError, 'Groq did not accept the API key.')
+  assert.equal(out.stopped, '')
+  assert.equal(out.people.length, 0)
+  assert.equal(opened(b).length, 1, 'stops at the first failure')
+  assert.equal(b.calls.filter(([k]) => k === 'close').length, 1, 'the video is closed again')
 })

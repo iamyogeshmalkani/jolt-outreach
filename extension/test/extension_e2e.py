@@ -52,8 +52,11 @@ class FakeGitHub(BaseHTTPRequestHandler):
             return self._send(401, {"error": {"message": "invalid api key"}})
         system = next(m["content"] for m in body["messages"] if m["role"] == "system")
         user = next(m["content"] for m in body["messages"] if m["role"] == "user")
-        kind = "comment" if "join public TikTok" in system else "opener"
-        text = json.dumps([f"Groq {kind} number {i} written for this one" for i in range(len(json.loads(user)))])
+        comments = json.loads(user)
+        if "screen public TikTok comments" in system:  # the check of which comments are about the writer's own habit
+            text = json.dumps(["came back" in c for c in comments])
+        else:
+            text = json.dumps([f"Groq opener number {i} written for this one" for i in range(len(comments))])
         self._send(200, {"choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": text, "reasoning": "..."}}]})
 
     def do_PUT(self):
@@ -132,8 +135,9 @@ def main():
         assert 1 <= len(people) <= 8, len(people)
         assert all(x["handle"].startswith("fan") and "reply that must be ignored" not in x["comment"] for x in people)
         assert all(x["opener"].startswith("Groq opener number") and x["priority"] in "AB" for x in people), [x["opener"] for x in people][:3]
-        path, call = AI_CALLS[0]
-        assert len(AI_CALLS) == 1 and path == "/openai/v1/chat/completions" and call["model"] == "openai/gpt-oss-20b", AI_CALLS
+        assert all(path == "/openai/v1/chat/completions" and call["model"] == "openai/gpt-oss-20b" for path, call in AI_CALLS), AI_CALLS
+        opener_calls = [c for _, c in AI_CALLS if "screen public TikTok comments" not in c["messages"][0]["content"]]
+        assert len(opener_calls) == 1 and len(AI_CALLS) > 1, "one check per video's comments, then one request for the opening lines"
         assert PUTS[0][0] == "people.json" and PUTS[0][1]["branch"] == "data"
         assert "videos.json" not in FILES
         print(f"people run ok: {len(people)} people published, opening line by Groq: {people[0]['opener']!r}")
@@ -147,17 +151,14 @@ def main():
         assert len(handles) == len(set(handles)), handles
         print("second run: no duplicate people:", len(handles), "in total")
 
-        # 6. a wrong AI key never breaks a run: the built-in opening lines are used and the reason is logged
+        # 6. a wrong AI key ends the run with the reason and saves nobody, because no comment could be checked
         sw.evaluate("chrome.storage.local.get('settings').then(r => chrome.storage.local.set({settings: {...r.settings, aiKey: 'wrong'}, seen: {}}))")
         FILES.pop("people.json")
         popup.click("#people")
         status = wait_idle(sw, timeout=420)
-        assert not status.get("error"), status
-        fallback = json.loads(FILES["people.json"]["text"])
-        assert fallback and all(not x["opener"].startswith("Groq") and len(x["opener"]) > 10 for x in fallback), fallback
-        log = sw.evaluate("chrome.storage.local.get('log').then(r => r.log.join('\\n'))")
-        assert "did not accept the API key" in log, log[-400:]
-        print("wrong AI key: run still saved", len(fallback), "people with the built-in opening lines")
+        assert "did not accept the API key" in status.get("error", ""), status
+        assert "people.json" not in FILES, FILES.keys()
+        print("wrong AI key: run stopped with:", status["error"])
 
         # 7. a verification check pauses the hourly runs
         ctx.unroute("https://www.tiktok.com/**")

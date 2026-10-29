@@ -33,6 +33,7 @@ $('save').onclick = async () => {
   }
   if (!/^[\w.-]+\/[\w.-]+$/.test(next.repo)) return say('The repo should look like owner/name.', true)
   if (!next.token) return say('Paste your GitHub token.', true)
+  if (!next.aiKey) return say('Paste an AI key. It picks which comments are really about a habit.', true)
   await chrome.storage.local.set({ settings: next })
   chrome.runtime.sendMessage({ type: 'reschedule' })
   say('Checking with GitHub…')
@@ -54,7 +55,7 @@ $('save').onclick = async () => {
 }
 
 const HINTS = {
-  groq: 'Get a key at console.groq.com/keys. Check your account\'s limits page for what the free plan allows. When the daily limit runs out or a request fails, the built-in opening lines are used.',
+  groq: 'Get a key at console.groq.com/keys. Check your account\'s limits page for what the free plan allows. It reads each comment and keeps only people talking about their own habit. When the daily limit runs out or a request fails, the run stops and nothing is saved from the comments it could not check.',
   anthropic: 'Get a key at platform.claude.com, in a workspace with a low monthly spend limit. It is billed to your Anthropic account, separately from any Claude.ai plan.',
 }
 function explainProvider() {

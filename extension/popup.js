@@ -21,9 +21,12 @@ async function render() {
   $('error').textContent = status.error || ''
   $('resume').hidden = !s.paused
   $('enabled').checked = s.enabled
-  $('claude').textContent = s.aiKey && s.useAi
-    ? `Opening lines are written by ${PROVIDERS[s.aiProvider]?.label ?? 'AI'} (${modelOf({ provider: s.aiProvider, model: s.aiModel })}).`
-    : 'Opening lines use the built-in templates.'
+  const who = `${PROVIDERS[s.aiProvider]?.label ?? 'AI'} (${modelOf({ provider: s.aiProvider, model: s.aiModel })})`
+  $('claude').textContent = !s.aiKey
+    ? 'Add an AI key in Settings. It picks which comments are really about a habit.'
+    : s.useAi
+      ? `${who} picks the comments and writes the opening lines.`
+      : `${who} picks the comments. Opening lines use the built-in templates.`
   $('hours').textContent = `Runs between ${s.startHour}:00 and ${s.endHour}:00 while Chrome is open.`
   $('people').disabled = Boolean(status.running)
   $('log').textContent = log.join('\n') || 'Nothing yet.'

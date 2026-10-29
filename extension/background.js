@@ -4,7 +4,7 @@ import { publish, fetchKnown } from './lib/github.js'
 import { clickCard, closeVideo, readCommentsPage, readGuard, readOpenVideo, readSearchCards } from './lib/pages.js'
 import { DEFAULTS } from './lib/settings.js'
 import { Stop, findPeople } from './lib/tasks.js'
-import { improve } from './lib/llm.js'
+import { improve, pickRelevant } from './lib/llm.js'
 
 const store = chrome.storage.local
 const getSettings = async () => ({ ...DEFAULTS, ...((await store.get('settings')).settings || {}) })
@@ -82,6 +82,10 @@ async function run(manual, delayMs = 0) {
     await patchStatus({ error: 'Add your GitHub token in Settings first.', running: false })
     return
   }
+  if (!s.aiKey.trim()) {
+    await patchStatus({ error: 'Add an AI key in Settings first. The AI picks which comments are really about a habit.', running: false })
+    return
+  }
   busy = true
   const keepAlive = setInterval(() => chrome.runtime.getPlatformInfo(), 20_000) // keeps Chrome from stopping this worker mid-run
   let win
@@ -97,11 +101,12 @@ async function run(manual, delayMs = 0) {
 
     win = await chrome.windows.create({ url: 'about:blank', focused: false }) // no fixed size: a size that does not fit the screen is rejected
     const browser = makeBrowser(win.tabs[0].id)
-    const result = await findPeople(browser, known, seen, log)
+    const ai = { provider: s.aiProvider, key: s.aiKey.trim(), model: s.aiModel, ...(s.aiApi ? { api: s.aiApi } : {}) } // `aiApi` is only set by tests
+    const result = await findPeople(browser, known, seen, log, (rows) => pickRelevant(ai, rows))
 
     const found = result.people.length
     if (found && s.aiKey && s.useAi) {
-      await improve({ provider: s.aiProvider, key: s.aiKey.trim(), model: s.aiModel, ...(s.aiApi ? { api: s.aiApi } : {}) }, result, log) // `aiApi` is only set by tests
+      await improve(ai, result, log)
     }
     if (found) await publish(cfg, result)
     await store.set({ seen: { handles: [...seen.handles].slice(-3000) } })
@@ -109,13 +114,15 @@ async function run(manual, delayMs = 0) {
     if (result.stopped) {
       if (!manual) await store.set({ settings: { ...s, paused: true } })
       await patchStatus({ error: result.stopped, message: found ? `Saved ${found} people before stopping.` : '' })
+    } else if (result.aiError) {
+      await patchStatus({ error: result.aiError, message: found ? `Saved ${found} people before the AI stopped answering.` : '' })
     } else {
       await patchStatus({ message: found ? `Saved ${found} people. The page shows them within about 5 minutes.` : 'Nothing new found this time.' })
     }
     await patchStatus({ lastRun: { at: Date.now(), found } })
     chrome.action.setBadgeBackgroundColor({ color: '#b5fc4f' })
     chrome.action.setBadgeText({ text: found ? String(found) : '' })
-    await log(result.stopped ? `Stopped: ${result.stopped}` : `Done: ${found} people`)
+    await log(result.stopped ? `Stopped: ${result.stopped}` : result.aiError ? `Stopped: ${result.aiError}` : `Done: ${found} people`)
   } catch (e) {
     await patchStatus({ error: e.message || String(e) })
     await log(`Failed: ${e.message || e}`)

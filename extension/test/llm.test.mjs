@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import http from 'node:http'
-import { OPENER_SYSTEM, ask, check, improve, parseList } from '../lib/llm.js'
+import { JUDGE_SYSTEM, OPENER_SYSTEM, ask, check, improve, keyProblem, parseList, pickRelevant } from '../lib/llm.js'
 
 // A stand-in for an AI API. `reply(body, headers, url, count)` returns [status, json].
 function fake(reply) {
@@ -63,6 +63,20 @@ test('Claude: retries once without the effort setting if the model does not take
   try { await assert.rejects(ask(claude(refusal.api), 's', 'u'), /declined/) } finally { refusal.server.close() }
 })
 
+test('spots a key pasted under the wrong provider, before sending anything', async () => {
+  assert.match(keyProblem({ provider: 'anthropic', key: 'gsk_abc' }), /looks like a Groq key.*Choose Groq/)
+  assert.match(keyProblem({ provider: 'groq', key: 'sk-ant-abc' }), /looks like a Claude \(Anthropic\) key.*Choose Claude/)
+  assert.match(keyProblem({ provider: 'groq', key: 'xai-abc' }), /xAI Grok key.*does not use xAI Grok/)
+  assert.equal(keyProblem({ provider: 'groq', key: 'gsk_abc' }), '')
+  assert.equal(keyProblem({ provider: 'anthropic', key: 'sk-ant-abc' }), '')
+  assert.equal(keyProblem({ provider: 'groq', key: 'something-unrecognised' }), '')
+  const { seen, server, api } = await fake(() => groqText('x'))
+  try {
+    await assert.rejects(ask({ provider: 'groq', key: 'xai-abc', api }, 's', 'u'), /xAI Grok key/)
+    assert.equal(seen.length, 0, 'nothing is sent with a key that cannot work')
+  } finally { server.close() }
+})
+
 test('reads a list even when the model adds words around it', () => {
   assert.deepEqual(parseList('Here you go:\n["one", "two"]\nHope that helps!', 2), ['one', 'two'])
   assert.throws(() => parseList('no list here', 1), /did not return a list/)
@@ -116,4 +130,28 @@ test('makes no request when there is nothing to improve', async () => {
     await improve(groq(api), { people: [] })
     assert.equal(seen.length, 0)
   } finally { server.close() }
+})
+
+test('pickRelevant keeps only the comments the model marks true, and asks in groups of 25', async () => {
+  const { seen, server, api } = await fake((body) => groqText(JSON.stringify(JSON.parse(userOf(body)).map((t) => /my habit/.test(t) ? true : t === 'maybe' ? 'true' : false))))
+  try {
+    const rows = [
+      { handle: 'a', text: 'my habit is scrolling all night' },
+      { handle: 'b', text: 'haha so funny' },
+      { handle: 'c', text: 'maybe' },
+      ...Array.from({ length: 30 }, (_, i) => ({ handle: 'x' + i, text: i === 29 ? 'my habit again' : 'lol' })),
+    ]
+    const kept = await pickRelevant(groq(api), rows)
+    assert.deepEqual(kept.map((r) => r.handle), ['a', 'x29'], 'only a real true counts, not the string "true"')
+    assert.equal(seen.length, 2)
+    assert.equal(systemOf(seen[0].body), JUDGE_SYSTEM)
+    assert.equal(JSON.parse(userOf(seen[0].body)).length, 25)
+  } finally { server.close() }
+})
+
+test('pickRelevant throws when the model fails or answers the wrong number of items, so unchecked comments are never kept', async () => {
+  const down = await fake(() => [401, {}])
+  try { await assert.rejects(pickRelevant(groq(down.api), [{ handle: 'a', text: 'x' }]), /did not accept the API key/) } finally { down.server.close() }
+  const short = await fake(() => groqText('[true]'))
+  try { await assert.rejects(pickRelevant(groq(short.api), [{ handle: 'a', text: 'x' }, { handle: 'b', text: 'y' }]), /wrong number/) } finally { short.server.close() }
 })

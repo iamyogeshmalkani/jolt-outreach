@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Item } from './helpers'
-import { NEXT_STEP } from './types'
+import { NEXT_STEP, PREV_STEP } from './types'
 
 type Props = {
   item: Item | null
@@ -60,6 +60,7 @@ export default function Conversation(p: Props) {
   const { item } = p
   const idx = p.statuses.indexOf(p.status)
   const next = idx <= 2 ? { label: NEXT_STEP[idx], to: p.statuses[idx + 1] } : null
+  const prev = idx >= 1 && idx <= 3 ? { label: PREV_STEP[idx - 1], to: p.statuses[idx - 1] } : null
   const skipped = idx === p.statuses.length - 1
   const copyLabel = copied ? 'Copied' : 'Copy message'
 
@@ -99,6 +100,7 @@ export default function Conversation(p: Props) {
                 {next.label}
               </button>
             )}
+            {prev && <button className="quiet" onClick={() => p.onStatus(prev.to)}>{prev.label}</button>}
             {idx === 0 && <button className="quiet" onClick={() => p.onStatus(p.statuses[p.statuses.length - 1])}>Skip</button>}
           </>
         )}

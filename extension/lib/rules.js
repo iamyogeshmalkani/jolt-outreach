@@ -1,9 +1,5 @@
 // The rules for who and what is worth reaching out to. A port of the filters in jolt_outreach.py.
 
-export const FIRST_PERSON = /\b(i|i'm|im|i’m|i've|ive|my|me|myself)\b/i
-export const SELF_ACTION = /\b(quit|came back|relapsed?|deleted|downloaded|tried)\b/i
-export const STRUGGLE =
-  /scroll|phone|screen ?time|addict|hooked|doom|hours|hrs|can'?t stop|cant stop|can’t stop|quit|delete|focus|attention|brain|bored|habit|distract|zombie|cooked|tried|worked|limit|ignore|relapse|came back|how (do|can) (i|you)/i
 export const MINOR =
   /high ?school|middle ?school|\bgrade \d+|\d+(st|nd|rd|th) grade|freshman|sophomore|my (mom|mum|dad|parents)|i'?m (1[0-7])\b|\b1[0-7] ?(yo|y\/o|years? old)|homework|teacher/i
 export const SENSITIVE =
@@ -40,13 +36,15 @@ const OPENERS = [
   [/\d+ ?(hrs|hours)|hours/i, 'Saw your comment about how many hours you spend on your phone.'],
 ]
 
+// The cheap checks that run before any AI sees a comment: who wrote it, how long it is, and what must never be contacted.
+// Whether the comment is really about the person's own habit is decided by the AI (llm.js, pickRelevant).
 export function isCandidate(handle, text, creator) {
   const t = (text || '').trim()
   if (!handle || handle.toLowerCase() === (creator || '').toLowerCase()) return false
   if (t.length < 20 || t.length > 280) return false
   if (BRAND_HANDLE.test(handle) || PROMO.test(t)) return false
   if (MINOR.test(t) || SENSITIVE.test(t) || SEXUAL.test(t)) return false
-  return STRUGGLE.test(t) && (FIRST_PERSON.test(t) || SELF_ACTION.test(t) || /how (do|can) (i|you)/i.test(t))
+  return true
 }
 
 export const priority = (text) => (PRIORITY_A.test(text) ? 'A' : 'B')
