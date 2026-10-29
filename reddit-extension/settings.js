@@ -1,24 +1,24 @@
-import { check, DEFAULT_MODEL } from './lib/grok.js'
+import { PROVIDERS, check, providerOf } from './lib/ai.js'
 import { getJson, RedditError } from './lib/reddit.js'
 import { parseSubs } from './lib/rules.js'
-import { DEFAULTS } from './lib/settings.js'
+import { DEFAULTS, normalize } from './lib/settings.js'
 
 const $ = (id) => document.getElementById(id)
-const FIELDS = ['subs', 'period', 'postsPerSub', 'minComments', 'minScore', 'skip', 'xaiKey', 'model', 'name', 'offer', 'body', 'subject']
+const FIELDS = ['subs', 'period', 'postsPerSub', 'minComments', 'minScore', 'skip', 'provider', 'aiKey', 'model', 'name', 'offer', 'body', 'subject']
 const say = (id, text, bad = false) => {
   $(id).textContent = text
   $(id).className = bad ? 'bad' : ''
 }
 
 async function stored() {
-  return { ...DEFAULTS, ...((await chrome.storage.local.get('settings')).settings || {}) }
+  return normalize((await chrome.storage.local.get('settings')).settings)
 }
 
 async function load() {
   const s = await stored()
   for (const k of FIELDS) $(k).value = s[k]
   $('useAi').checked = s.useAi
-  $('model').placeholder = DEFAULT_MODEL
+  explainProvider()
 }
 
 function read(current) {
@@ -31,7 +31,8 @@ function read(current) {
     minComments: num('minComments', DEFAULTS.minComments, 0, 100000),
     minScore: num('minScore', DEFAULTS.minScore, 0, 100000),
     skip: $('skip').value,
-    xaiKey: $('xaiKey').value.trim(),
+    provider: $('provider').value,
+    aiKey: $('aiKey').value.trim(),
     model: $('model').value.trim(),
     useAi: $('useAi').checked,
     name: $('name').value,
@@ -62,14 +63,25 @@ $('testReddit').onclick = async () => {
   }
 }
 
-$('testGrok').onclick = async () => {
+function explainProvider() {
+  const p = PROVIDERS[$('provider').value] ?? PROVIDERS.groq
+  $('model').placeholder = p.model
+  $('aiHint').textContent =
+    `Get a ${p.label} key at ${p.getKey} (it starts with ${p.keyStart}) and check there what the free quota covers. ` +
+    'A key from one provider does not work with the other. Without a key, or if a request fails, you get a plain opening line and no reply draft. ' +
+    `The key stays in this Chrome and is only sent to ${p.label}. Only the text of posts and comments is sent.`
+}
+$('provider').addEventListener('change', explainProvider)
+
+$('testAi').onclick = async () => {
   const s = read(await stored())
-  if (!s.xaiKey) return say('grokMsg', 'Paste a key first.', true)
-  say('grokMsg', 'Checking…')
+  if (!s.aiKey) return say('aiMsg', 'Paste a key first.', true)
+  say('aiMsg', 'Checking…')
   try {
-    say('grokMsg', `Grok (${await check({ key: s.xaiKey, model: s.model, ...(s.aiApi ? { api: s.aiApi } : {}) })}) is working.`)
+    const model = await check({ provider: s.provider, key: s.aiKey, model: s.model, ...(s.aiApi ? { api: s.aiApi } : {}) })
+    say('aiMsg', `${providerOf({ provider: s.provider }).label} (${model}) is working.`)
   } catch (e) {
-    say('grokMsg', e.message, true)
+    say('aiMsg', e.message, true)
   }
 }
 

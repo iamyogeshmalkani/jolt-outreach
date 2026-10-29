@@ -65,14 +65,16 @@ because of the AI.
 ## The Reddit extension
 
 A second, separate extension for Reddit. For each subreddit you list, it finds the top posts, picks the
-top commenter on each, and drafts two things with Grok: a message to that commenter, and a reply you
+top commenter on each, and drafts two things with an AI model: a message to that commenter, and a reply you
 could post on the post. You send and post everything yourself.
 
 1. Download https://iamyogeshmalkani.github.io/jolt-outreach/jolt-reddit-extension.zip, unzip it and load
    it on `chrome://extensions` (Developer mode, Load unpacked), the same way as the TikTok one.
 2. Log into Reddit in that Chrome.
-3. Open its **Settings**. Add your subreddits, choose how many posts, and paste a Grok key from
-   console.x.ai. Use **Test Reddit** and **Test Grok** to check both.
+3. Open its **Settings**. Add your subreddits, choose how many posts, pick the AI provider and paste its
+   key: **Groq** (key from console.groq.com/keys, starts with `gsk_`, default model `openai/gpt-oss-20b`) or
+   **Grok (xAI)** (key from console.x.ai, starts with `xai-`). They are different companies and a key from
+   one does not work with the other. Settings says so if you mix them up. Use **Test Reddit** and **Test AI** to check both.
 4. Click the extension, choose **Find top posts**, then **Open dashboard**.
 
 In the dashboard, each post shows its top commenter and their comment, a message ready to send (the

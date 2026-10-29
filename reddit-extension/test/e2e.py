@@ -90,16 +90,18 @@ class Fake(BaseHTTPRequestHandler):
         self._send(404, {})
 
     def do_POST(self):
+        """A stand-in for Groq's POST /openai/v1/chat/completions."""
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-        GROK_CALLS.append(body)
-        if self.headers.get("Authorization") != "Bearer sk-test":
-            return self._send(401, {"error": {"message": "invalid api key"}})
-        system = next(m["content"] for m in body["input"] if m["role"] == "system")
+        GROK_CALLS.append((self.path, body))
+        if self.headers.get("Authorization") != "Bearer gsk_test":
+            return self._send(401, {"error": {"message": "Invalid API Key"}})
+        system = next(m["content"] for m in body["messages"] if m["role"] == "system")
+        user = next(m["content"] for m in body["messages"] if m["role"] == "user")
         if system.startswith("Reply with the single word OK"):  # the settings page's tiny check
-            return self._send(200, {"status": "completed", "output": [{"type": "message", "content": [{"type": "output_text", "text": "OK"}]}]})
-        n = len(json.loads(next(m["content"] for m in body["input"] if m["role"] == "user")))
+            return self._send(200, {"choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": "OK"}}]})
+        n = len(json.loads(user))
         text = json.dumps([GOOD_REPLY if "write replies to Reddit posts" in system else f"Your point about quitting scrolling really landed ({i})." for i in range(n)])
-        self._send(200, {"status": "completed", "output": [{"type": "reasoning", "summary": []}, {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": text}]}]})
+        self._send(200, {"choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": text, "reasoning": "..."}}]})
 
 
 def until(page, expression, timeout=20):
@@ -150,14 +152,26 @@ def main():
         st.click("#save")
         until(st, "document.getElementById('msg').textContent.includes('Saved')")
         assert "3 subreddits" in st.inner_text("#msg"), st.inner_text("#msg")
-        sw.evaluate("base => chrome.storage.local.get('settings').then(r => chrome.storage.local.set({settings: {...r.settings, redditBase: base, aiApi: base, xaiKey: 'sk-test'}}))", base)
+        sw.evaluate("base => chrome.storage.local.get('settings').then(r => chrome.storage.local.set({settings: {...r.settings, redditBase: base, aiApi: base}}))", base)
         st.reload()
+        assert st.input_value("#provider") == "groq", "Groq is the default provider"
+        # a key from the other provider is explained, not sent
+        st.fill("#aiKey", "xai-wrongprovider")
+        st.click("#testAi")
+        until(st, "document.getElementById('aiMsg').textContent.includes('looks like')")
+        assert "Grok (xAI) key" in st.inner_text("#aiMsg") and "Choose Grok (xAI)" in st.inner_text("#aiMsg"), st.inner_text("#aiMsg")
+        assert not GROK_CALLS, "nothing was sent with a key that cannot work"
+        print("wrong-provider key explained:", st.inner_text("#aiMsg"))
+        st.fill("#aiKey", "gsk_test")
         st.click("#testReddit")
         until(st, "document.getElementById('redditMsg').textContent.includes('works')")
         assert "1,234,567" in st.inner_text("#redditMsg")
-        st.click("#testGrok")
-        until(st, "document.getElementById('grokMsg').textContent.includes('working')")
-        print("settings:", st.inner_text("#msg"), "|", st.inner_text("#redditMsg"), "|", st.inner_text("#grokMsg"))
+        st.click("#testAi")
+        until(st, "document.getElementById('aiMsg').textContent.includes('working')")
+        assert "Groq (openai/gpt-oss-20b) is working" in st.inner_text("#aiMsg"), st.inner_text("#aiMsg")
+        st.click("#save")
+        until(st, "document.getElementById('msg').textContent.includes('Saved')")
+        print("settings:", st.inner_text("#redditMsg"), "|", st.inner_text("#aiMsg"))
 
         # 3. a full run
         popup.reload()
@@ -173,7 +187,7 @@ def main():
         assert all(i["comment"] == GOOD_REPLY for i in items)
         assert all(i["opener"].startswith("Your point about quitting scrolling") for i in items), [i["opener"] for i in items]
         log = sw.evaluate("chrome.storage.local.get('log').then(r => r.log.join('\\n'))")
-        assert "r/privatesub: private or restricted, skipped" in log and "Grok wrote 3 replies and 3 opening lines" in log, log
+        assert "r/privatesub: private or restricted, skipped" in log and "Groq wrote 3 replies and 3 opening lines" in log, log
         print("run ok:", sorted(by_id), "| top commenters:", [by_id[k]["top"]["author"] for k in ("g1", "g2", "d1")])
 
         # 4. the dashboard

@@ -1,13 +1,13 @@
-// Finds the top posts in your subreddits and their top commenter, then drafts a message and a reply with Grok.
+// Finds the top posts in your subreddits and their top commenter, then drafts a message and a reply with an AI model (Groq or Grok).
 // It only reads Reddit, in your own Chrome. You send every message and post every reply yourself.
 import { find } from './lib/finder.js'
-import { draft } from './lib/grok.js'
+import { draft } from './lib/ai.js'
 import { reddit } from './lib/reddit.js'
 import { parseSubs } from './lib/rules.js'
-import { DEFAULTS } from './lib/settings.js'
+import { normalize } from './lib/settings.js'
 
 const store = chrome.storage.local
-const getSettings = async () => ({ ...DEFAULTS, ...((await store.get('settings')).settings || {}) })
+const getSettings = async () => normalize((await store.get('settings')).settings)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const pause = () => sleep(1500 + Math.random() * 1500) // be gentle with Reddit
 
@@ -42,8 +42,8 @@ async function run() {
       authors: new Set([...(seen.authors || []), ...existing.filter((i) => i.top).map((i) => i.top.author.toLowerCase())]),
     }
     const { items, stopped } = await find(reddit(s.redditBase), s, known, log, pause) // `redditBase` is only set by tests
-    if (items.length && s.xaiKey && s.useAi) {
-      await draft({ key: s.xaiKey.trim(), model: s.model, ...(s.aiApi ? { api: s.aiApi } : {}) }, items, log) // `aiApi` is only set by tests
+    if (items.length && s.aiKey && s.useAi) {
+      await draft({ provider: s.provider, key: s.aiKey.trim(), model: s.model, ...(s.aiApi ? { api: s.aiApi } : {}) }, items, log) // `aiApi` is only set by tests
     }
 
     // Merge with what is stored now, because the dashboard may have changed statuses while this ran.

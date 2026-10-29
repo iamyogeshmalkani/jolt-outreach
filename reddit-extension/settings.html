@@ -45,20 +45,22 @@
     </section>
 
     <section>
-      <h2>Drafts written by Grok (optional)</h2>
-      <label>xAI API key
-        <input id="xaiKey" type="password" autocomplete="off" />
+      <h2>Drafts written by AI (optional)</h2>
+      <label>Provider
+        <select id="provider">
+          <option value="groq">Groq (gpt-oss-20b)</option>
+          <option value="xai">Grok (xAI)</option>
+        </select>
+      </label>
+      <label>API key
+        <input id="aiKey" type="password" autocomplete="off" />
       </label>
       <label>Model <span class="hint">(leave empty for the default)</span>
         <input id="model" autocomplete="off" />
       </label>
-      <label class="check"><input id="useAi" type="checkbox" /> Use Grok to draft replies and opening lines</label>
-      <p class="hint">
-        Get a key at console.x.ai and check there what your free quota covers. Without a key, or if a request fails,
-        you get a built-in opening line and no reply draft. The key stays in this Chrome and is only sent to xAI.
-        Only the text of posts and comments is sent.
-      </p>
-      <div class="row"><button id="testGrok" class="secondary">Test Grok</button><span id="grokMsg" role="status"></span></div>
+      <label class="check"><input id="useAi" type="checkbox" /> Use it to draft replies and opening lines</label>
+      <p class="hint" id="aiHint"></p>
+      <div class="row"><button id="testAi" class="secondary">Test AI</button><span id="aiMsg" role="status"></span></div>
     </section>
 
     <div class="row">

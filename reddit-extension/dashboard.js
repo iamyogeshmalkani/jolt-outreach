@@ -1,4 +1,4 @@
-import { DEFAULTS, fill } from './lib/settings.js'
+import { DEFAULTS, fill, normalize } from './lib/settings.js'
 
 const STATUSES = ['To send', 'Sent', 'Replied', 'Booked', 'Skip']
 // A post stays in "To do" until both the message and the reply have been dealt with. A post with no suitable commenter only needs the reply.
@@ -29,7 +29,7 @@ function dmUrl(it) {
 async function load() {
   const r = await chrome.storage.local.get(['items', 'settings', 'status'])
   state.items = r.items || []
-  state.settings = { ...DEFAULTS, ...(r.settings || {}) }
+  state.settings = normalize(r.settings)
   state.status = r.status || {}
   render()
 }
@@ -103,7 +103,7 @@ function renderDetail(it) {
       <h3>Reply to the post <span class="pill">${esc(it.commentStatus)}</span></h3>
       ${text
         ? `<textarea data-edit="comment" rows="6" aria-label="Your reply">${esc(text)}</textarea>`
-        : `<p class="hint">No reply drafted. Add a Grok key in Settings to get one.</p>`}
+        : `<p class="hint">No reply drafted. Add an AI key in Settings to get one.</p>`}
       <div class="actions">
         <a class="button secondary" href="${esc(it.url)}" target="_blank" rel="noopener">Open the post</a>
         ${text ? '<button class="secondary" data-copy="comment">Copy reply</button>' : ''}
