@@ -39,22 +39,26 @@ async function fetchLocal<T>(path: string): Promise<T | null> {
   }
 }
 
-// Set by the deploy workflow, for example https://raw.githubusercontent.com/owner/repo/data/
-const DATA_BASE: string | undefined = import.meta.env.VITE_DATA_BASE
+// Set by the deploy workflow to "owner/name". The lists are read through GitHub's API, not the raw file address:
+// the raw address sits behind a cache that can serve an old copy for minutes, and the API reads the repo directly.
+const DATA_REPO: string | undefined = import.meta.env.VITE_REPO
 
 async function fetchRemote<T>(file: string): Promise<T | null> {
-  if (!DATA_BASE) return null
-  try {
-    const res = await fetch(`${DATA_BASE}${file}?t=${Math.floor(Date.now() / 60_000)}`)
-    return res.ok ? ((await res.json()) as T) : null
-  } catch {
-    return null
+  if (!DATA_REPO) return null
+  const res = await fetch(`https://api.github.com/repos/${DATA_REPO}/contents/${file}?ref=data`, {
+    headers: { Accept: 'application/vnd.github.raw+json' },
+  })
+  if (res.status === 404) return null // nothing saved yet
+  if (res.status === 403 || res.status === 429) {
+    throw new Error('GitHub is limiting how often this page can read data. Try again in a few minutes.')
   }
+  if (!res.ok) throw new Error(`GitHub answered ${res.status} when loading ${file}.`)
+  return (await res.json()) as T
 }
 
 export async function load(): Promise<Loaded> {
   // On the hosted page the data always comes from GitHub, so don't look for a local service there.
-  const data = DATA_BASE ? null : await fetchLocal<{ dir: string; people: Person[]; videos: Video[] }>('data')
+  const data = DATA_REPO ? null : await fetchLocal<{ dir: string; people: Person[]; videos: Video[] }>('data')
   let people: Person[], videos: Video[], dir = ''
   let saved: Partial<UiState> | null
   if (data) {
