@@ -11,6 +11,8 @@ from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
+from fixtures import search_html
+
 EXT = str(Path(__file__).resolve().parent.parent)
 FILES, PUTS = {}, []
 
@@ -51,23 +53,8 @@ class FakeGitHub(BaseHTTPRequestHandler):
         self._send(200, {})
 
 
-SEARCH = "<body>" + "".join(f'<a href="https://www.tiktok.com/@maker{i}/video/{i}">v{i}</a>' for i in (1, 2, 3)) + "</body>"
-VIDEO = """<body>
-<div data-e2e="browse-video-desc">Why I can't stop doomscrolling #dopamine detox</div>
-<strong data-e2e="like-count">9K</strong><strong data-e2e="comment-count">40</strong>
-<span>Comments (40)</span><div id="panel" style="height:200px;overflow:auto"></div>
-<script>(() => {
-  const panel = document.getElementById('panel'); let n = 0
-  const add = (k) => { for (let i = 0; i < k; i++, n++) { const r = document.createElement('div')
-    r.innerHTML = `<a href="/@fan${n}">fan${n}</a><div data-e2e="comment-level-1">Quit again for a couple days but came back to it, my phone wins ${n}</div>`; panel.appendChild(r) } }
-  document.querySelector('span').addEventListener('click', () => { if (!n) add(5) })
-})()</script></body>"""
-
-
 def tiktok(route):
-    url = route.request.url
-    html = SEARCH if "/search/" in url else VIDEO
-    route.fulfill(status=200, content_type="text/html", body=html)
+    route.fulfill(status=200, content_type="text/html", body=search_html())
 
 
 def wait_idle(sw, timeout=120):
@@ -129,17 +116,18 @@ def main():
         videos = json.loads(FILES["videos.json"]["text"])
         assert 1 <= len(videos) <= 2, videos
         assert all(v["draft"] and "jolt" not in v["draft"].lower() and v["comments"] == "40" for v in videos)
+        assert all(v["creator"] in ("maker1", "maker2") for v in videos), "the off-topic result must not be queued"
+        assert all("doomscrolling" in v["caption"] or "dopamine" in v["caption"] for v in videos)
         assert PUTS[0][1]["branch"] == "data"
         print(f"videos run ok: {len(videos)} videos published, e.g. {videos[0]['creator']} / {videos[0]['draft']!r}")
         popup.wait_for_function("document.getElementById('state').textContent.includes('Saved')")
         print("popup after run:", popup.inner_text("#state"))
 
         # 5. running again does not queue the same creators twice
-        before = {v["creator"] for v in videos}
         popup.click("#videos")
         wait_idle(sw)
         after = [v["creator"] for v in json.loads(FILES["videos.json"]["text"])]
-        assert len(after) == len(set(after)), after
+        assert len(after) == len(set(after)) and set(after) <= {"maker1", "maker2"}, after
         print("second run: no duplicate creators:", after)
 
         # 6. a people run
@@ -148,6 +136,7 @@ def main():
         assert not status.get("error"), status
         people = json.loads(FILES["people.json"]["text"])
         assert people and all(x["opener"] and x["priority"] in "AB" for x in people), people
+        assert all(x["handle"].startswith("fan") and "reply that must be ignored" not in x["comment"] for x in people)
         print(f"people run ok: {len(people)} people published, e.g. @{people[0]['handle']}: {people[0]['opener']}")
 
         # 7. a verification check pauses the hourly runs

@@ -1,7 +1,7 @@
 // Runs the finder inside your own Chrome: opens a small TikTok window, reads results the way a person would,
 // and saves what it finds to the `data` branch of your GitHub repo, where the hosted page picks it up.
 import { publish, fetchKnown } from './lib/github.js'
-import { collectLinks, readCommentsPage, readGuard, readVideo } from './lib/pages.js'
+import { clickCard, closeVideo, readCommentsPage, readGuard, readOpenVideo, readSearchCards } from './lib/pages.js'
 import { DEFAULTS } from './lib/settings.js'
 import { Stop, findPeople, findVideos } from './lib/tasks.js'
 
@@ -41,26 +41,31 @@ async function exec(tabId, func, args = []) {
 }
 
 function makeBrowser(tabId) {
-  const guard = async (hasLinks = true) => {
+  const guard = async (hasResults = true) => {
     const g = await exec(tabId, readGuard)
     if (g?.verify) throw new Stop('TikTok is showing a verification check. Solve it in Chrome, then run again.')
-    if (!hasLinks && g?.loggedOutHint) throw new Stop('You are logged out of TikTok in this Chrome. Log in, then run again.')
+    if (!hasResults && g?.loggedOutHint) throw new Stop('You are logged out of TikTok in this Chrome. Log in, then run again.')
   }
   return {
+    pause,
     async search(query) {
       await navigate(tabId, 'https://www.tiktok.com/search/video?q=' + encodeURIComponent(query))
-      await sleep(5000)
-      const links = (await exec(tabId, collectLinks)) || []
-      await guard(links.length > 0)
-      return links
+      await sleep(2500)
+      const cards = (await exec(tabId, readSearchCards)) || []
+      await guard(cards.length > 0)
+      return cards
     },
-    async open(url) {
-      await navigate(tabId, url)
-      await sleep(4500)
+    // Click the result like a person would. If it is not on this page, open the video's own page instead.
+    async openVideo(url) {
+      const clicked = await exec(tabId, clickCard, [new URL(url).pathname])
+      if (!clicked) {
+        await navigate(tabId, url)
+        await sleep(3500)
+      }
       await guard()
+      return exec(tabId, readOpenVideo)
     },
-    pause,
-    video: () => exec(tabId, readVideo),
+    closeVideo: () => exec(tabId, closeVideo),
     comments: () => exec(tabId, readCommentsPage),
   }
 }
