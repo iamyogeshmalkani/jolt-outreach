@@ -5,6 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "setup": "node scripts/py.mjs setup",
+    "login": "node scripts/py.mjs --login",
+    "find": "node scripts/py.mjs",
+    "videos": "node scripts/py.mjs --videos",
+    "watch": "node scripts/py.mjs --videos --every 60",
+    "selftest": "node scripts/py.mjs --selftest",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit"
   },
