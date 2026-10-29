@@ -43,10 +43,12 @@ The token stays in your Chrome and is only ever sent to GitHub. It can only touc
 ## Optional: draft comments and opening lines written by AI
 
 Without this, drafts come from a few built-in templates. With an API key, an AI model writes each draft
-comment from that video's caption, and each opening line from what the person actually said. Two
+comment from that video's caption, and each opening line from what the person actually said. Three
 providers are supported:
 
-- **Grok (xAI), the default.** Get a key at console.x.ai and check there what your free quota covers.
+- **Groq, the default.** Get a key at console.groq.com/keys. Default model `openai/gpt-oss-20b`. Check your
+  account's limits page for what the free plan allows. Signup may or may not ask for a card.
+- **Grok (xAI).** Get a key at console.x.ai and check there what your free quota covers.
   Default model `grok-4.20-0309-non-reasoning`.
 - **Claude (Anthropic).** Get a key at platform.claude.com, in a workspace with a low monthly spend limit.
   It is billed to your Anthropic account, separately from any Claude.ai plan. Default model `claude-haiku-5-5`.

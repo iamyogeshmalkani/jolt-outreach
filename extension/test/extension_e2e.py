@@ -45,18 +45,16 @@ class FakeGitHub(BaseHTTPRequestHandler):
         self._send(200, {"full_name": "o/r", "permissions": {"push": True}})
 
     def do_POST(self):
-        """A stand-in for xAI's POST /v1/responses (Grok)."""
+        """A stand-in for Groq's POST /openai/v1/chat/completions."""
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         AI_CALLS.append((self.path, body))
         if self.headers.get("Authorization") != "Bearer sk-test":
             return self._send(401, {"error": {"message": "invalid api key"}})
-        system = next(m["content"] for m in body["input"] if m["role"] == "system")
-        user = next(m["content"] for m in body["input"] if m["role"] == "user")
+        system = next(m["content"] for m in body["messages"] if m["role"] == "system")
+        user = next(m["content"] for m in body["messages"] if m["role"] == "user")
         kind = "comment" if "join public TikTok" in system else "opener"
-        text = json.dumps([f"Grok {kind} number {i} written for this one" for i in range(len(json.loads(user)))])
-        self._send(200, {"status": "completed", "output": [
-            {"type": "reasoning", "summary": []},
-            {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": text}]}]})
+        text = json.dumps([f"Groq {kind} number {i} written for this one" for i in range(len(json.loads(user)))])
+        self._send(200, {"choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": text, "reasoning": "..."}}]})
 
     def do_PUT(self):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
@@ -121,7 +119,7 @@ def main():
         print("settings validation:", opts.inner_text("#msg"))
 
         # 4. a full videos run
-        sw.evaluate("api => chrome.storage.local.set({settings: {repo: 'o/r', token: 'good', api, aiApi: api, aiProvider: 'xai', aiKey: 'sk-test', aiModel: '', useAi: true, enabled: true, startHour: 0, endHour: 24, skip: '', paused: False}})".replace("False", "false"), api)
+        sw.evaluate("api => chrome.storage.local.set({settings: {repo: 'o/r', token: 'good', api, aiApi: api, aiProvider: 'groq', aiKey: 'sk-test', aiModel: '', useAi: true, enabled: true, startHour: 0, endHour: 24, skip: '', paused: False}})".replace("False", "false"), api)
         popup.reload()
         popup.wait_for_function("!document.getElementById('videos').disabled")
         popup.click("#videos")
@@ -133,12 +131,12 @@ def main():
         assert all(v["creator"] in ("maker1", "maker2") for v in videos), "the off-topic result must not be queued"
         assert all("doomscrolling" in v["caption"] or "dopamine" in v["caption"] for v in videos)
         assert PUTS[0][1]["branch"] == "data"
-        assert all(v["draft"].startswith("Grok comment number") for v in videos), [v["draft"] for v in videos]
+        assert all(v["draft"].startswith("Groq comment number") for v in videos), [v["draft"] for v in videos]
         path, call = AI_CALLS[0]
-        assert len(AI_CALLS) == 1 and path == "/v1/responses" and call["model"] == "grok-4.20-0309-non-reasoning", AI_CALLS
-        user = next(m["content"] for m in call["input"] if m["role"] == "user")
+        assert len(AI_CALLS) == 1 and path == "/openai/v1/chat/completions" and call["model"] == "openai/gpt-oss-20b", AI_CALLS
+        user = next(m["content"] for m in call["messages"] if m["role"] == "user")
         assert sorted(json.loads(user)) == sorted(v["caption"] for v in videos)
-        print(f"videos run ok: {len(videos)} videos published, drafted by Grok: {videos[0]['draft']!r}")
+        print(f"videos run ok: {len(videos)} videos published, drafted by Groq: {videos[0]['draft']!r}")
         popup.wait_for_function("document.getElementById('state').textContent.includes('Saved')")
         print("popup after run:", popup.inner_text("#state"))
 
@@ -156,8 +154,8 @@ def main():
         people = json.loads(FILES["people.json"]["text"])
         assert people and all(x["opener"] and x["priority"] in "AB" for x in people), people
         assert all(x["handle"].startswith("fan") and "reply that must be ignored" not in x["comment"] for x in people)
-        assert all(x["opener"].startswith("Grok opener number") for x in people), [x["opener"] for x in people][:3]
-        print(f"people run ok: {len(people)} people published, opening line by Grok: {people[0]['opener']!r}")
+        assert all(x["opener"].startswith("Groq opener number") for x in people), [x["opener"] for x in people][:3]
+        print(f"people run ok: {len(people)} people published, opening line by Groq: {people[0]['opener']!r}")
 
         # 6b. a wrong AI key never breaks a run: the built-in drafts are used and the reason is logged
         sw.evaluate("chrome.storage.local.get('settings').then(r => chrome.storage.local.set({settings: {...r.settings, aiKey: 'wrong'}, seen: {}}))")
@@ -166,7 +164,7 @@ def main():
         status = wait_idle(sw)
         assert not status.get("error"), status
         fallback = json.loads(FILES["videos.json"]["text"])
-        assert fallback and all(not v["draft"].startswith("Grok") and len(v["draft"]) > 10 for v in fallback), fallback
+        assert fallback and all(not v["draft"].startswith("Groq") and len(v["draft"]) > 10 for v in fallback), fallback
         log = sw.evaluate("chrome.storage.local.get('log').then(r => r.log.join('\\n'))")
         assert "did not accept the API key" in log, log[-400:]
         print("wrong AI key: run still saved", len(fallback), "videos with the built-in drafts")

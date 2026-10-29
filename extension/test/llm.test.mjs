@@ -22,8 +22,11 @@ function fake(reply) {
 // Shapes follow each provider's documentation.
 const claudeText = (t) => [200, { stop_reason: 'end_turn', content: [{ type: 'thinking', thinking: '' }, { type: 'text', text: t }] }]
 const grokText = (t) => [200, { status: 'completed', output: [{ type: 'reasoning', summary: [] }, { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: t }] }] }]
-const systemOf = (body) => body.system ?? (Array.isArray(body.input) ? body.input.find((m) => m.role === 'system')?.content : body.input)
-const userOf = (body) => body.messages?.[0]?.content ?? body.input.find((m) => m.role === 'user').content
+const groqText = (t) => [200, { choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: t, reasoning: 'thinking it over' } }] }]
+const thread = (body) => (Array.isArray(body.messages) ? body.messages : Array.isArray(body.input) ? body.input : [])
+const systemOf = (body) => body.system ?? (thread(body).find((m) => m.role === 'system')?.content ?? body.input)
+const userOf = (body) => thread(body).find((m) => m.role === 'user').content
+const groq = (api, extra = {}) => ({ provider: 'groq', key: 'gsk-test', api, ...extra })
 const grok = (api, extra = {}) => ({ provider: 'xai', key: 'xai-test', api, ...extra })
 const claude = (api, extra = {}) => ({ provider: 'anthropic', key: 'sk-test', api, ...extra })
 
@@ -64,6 +67,38 @@ test('Grok: explains common failures in plain words', async () => {
     try { await assert.rejects(ask(grok(api), 's', 'u'), want) } finally { server.close() }
   }
   await assert.rejects(ask(grok('http://127.0.0.1:1'), 's', 'u'), /Could not reach Grok/)
+})
+
+test('Groq: sends an OpenAI-style chat request and reads the message content', async () => {
+  const { seen, server, api } = await fake(() => groqText('["a comment that is long enough to keep"]'))
+  try {
+    assert.equal(await ask(groq(api), 'be brief', '["caption"]'), '["a comment that is long enough to keep"]')
+    const [{ url, headers, body }] = seen
+    assert.equal(url, '/openai/v1/chat/completions')
+    assert.equal(headers.authorization, 'Bearer gsk-test')
+    assert.equal(body.model, 'openai/gpt-oss-20b')
+    assert.deepEqual(body.messages, [{ role: 'system', content: 'be brief' }, { role: 'user', content: '["caption"]' }])
+    assert.equal(body.reasoning_effort, 'low')
+    assert.ok(body.max_completion_tokens >= 1500, 'room for the model\'s thinking as well as its answer')
+    for (const unwanted of ['input', 'system', 'temperature', 'max_output_tokens']) assert.ok(!(unwanted in body), unwanted)
+  } finally { server.close() }
+})
+
+test('Groq: retries in a plainer form if the extra settings are rejected, and explains failures', async () => {
+  const { seen, server, api } = await fake((body) => (body.reasoning_effort ? [400, { error: { message: 'unsupported parameter' } }] : groqText('ok')))
+  try {
+    assert.equal(await ask(groq(api, { model: 'llama-3.3-70b-versatile' }), 's', 'u'), 'ok')
+    assert.equal(seen.length, 2)
+    assert.equal(seen[1].body.model, 'llama-3.3-70b-versatile')
+    assert.ok(!('reasoning_effort' in seen[1].body) && !('max_completion_tokens' in seen[1].body) && seen[1].body.max_tokens >= 1500)
+  } finally { server.close() }
+  for (const [status, want] of [[401, /Groq did not accept the API key/], [429, /limiting requests, or the quota/], [404, /does not know this model/]]) {
+    const f = await fake(() => [status, {}])
+    try { await assert.rejects(ask(groq(f.api), 's', 'u'), want) } finally { f.server.close() }
+  }
+  const cut = await fake(() => [200, { choices: [{ finish_reason: 'length', message: { content: '' } }] }])
+  try { await assert.rejects(ask(groq(cut.api), 's', 'u'), /ran out of room/) } finally { cut.server.close() }
+  await assert.rejects(ask(groq('http://127.0.0.1:1'), 's', 'u'), /Could not reach Groq/)
 })
 
 test('Claude: sends the documented request and reads the text block', async () => {
@@ -108,7 +143,7 @@ test('reads a list even when the model adds words around it', () => {
   assert.throws(() => parseList('[not json]', 1), /could not be read/)
 })
 
-for (const [name, cfgOf, textOf] of [['Grok', grok, grokText], ['Claude', claude, claudeText]]) {
+for (const [name, cfgOf, textOf] of [['Groq', groq, groqText], ['Grok', grok, grokText], ['Claude', claude, claudeText]]) {
   test(`${name}: replaces drafts and opening lines, keeping the template where the model breaks a rule`, async () => {
     const { seen, server, api } = await fake((body) => {
       if (systemOf(body) === COMMENT_SYSTEM) {
@@ -151,7 +186,7 @@ for (const [name, cfgOf, textOf] of [['Grok', grok, grokText], ['Claude', claude
     try {
       const model = await check(cfgOf(api))
       assert.equal(seen.length, 1)
-      assert.equal(model, name === 'Grok' ? 'grok-4.20-0309-non-reasoning' : 'claude-haiku-5-5')
+      assert.equal(model, { Groq: 'openai/gpt-oss-20b', Grok: 'grok-4.20-0309-non-reasoning', Claude: 'claude-haiku-5-5' }[name])
     } finally { server.close() }
     const empty = await fake(() => textOf(''))
     try { await assert.rejects(check(cfgOf(empty.api)), /answered with nothing/) } finally { empty.server.close() }

@@ -1,13 +1,14 @@
 // Optional: an AI model writes the draft comments and the opening lines instead of the fixed templates.
-// Two providers: Grok (xAI) and Claude (Anthropic). Both are called with plain fetch, because a Chrome extension has
+// Three providers: Groq, Grok (xAI) and Claude (Anthropic). Both are called with plain fetch, because a Chrome extension has
 // no build step to bundle an SDK. Anything that goes wrong falls back to the templates, so a run never fails because of this.
 import { commentOk } from './rules.js'
 
 export const PROVIDERS = {
+  groq: { label: 'Groq', model: 'openai/gpt-oss-20b', api: 'https://api.groq.com' },
   xai: { label: 'Grok', model: 'grok-4.20-0309-non-reasoning', api: 'https://api.x.ai' },
   anthropic: { label: 'Claude', model: 'claude-haiku-5-5', api: 'https://api.anthropic.com' },
 }
-export const providerOf = (cfg) => PROVIDERS[cfg.provider] ?? PROVIDERS.xai
+export const providerOf = (cfg) => PROVIDERS[cfg.provider] ?? PROVIDERS.groq
 export const modelOf = (cfg) => cfg.model || providerOf(cfg).model
 
 export const COMMENT_SYSTEM = `You help a researcher join public TikTok conversations about phone and screen-time habits.
@@ -107,9 +108,35 @@ async function askXai(cfg, system, userText, maxTokens) {
     .join('')
 }
 
+// ---- Groq: POST /openai/v1/chat/completions (OpenAI-compatible) ----
+async function askGroq(cfg, system, userText, maxTokens) {
+  const base = cfg.api ?? PROVIDERS.groq.api
+  const messages = [
+    { role: 'system', content: system },
+    { role: 'user', content: userText },
+  ]
+  const send = (extra) =>
+    fetch(`${base}/openai/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${cfg.key}` },
+      body: JSON.stringify({ model: modelOf(cfg), messages, ...extra }),
+    })
+  // This model thinks before it answers, and that thinking counts toward the limit, so leave plenty of room.
+  let res = await send({ max_completion_tokens: maxTokens + 1500, reasoning_effort: 'low' })
+  if (res.status === 400) res = await send({ max_tokens: maxTokens + 1500 }) // a model that does not take those settings
+  if (!res.ok) throw await failure('Groq', res)
+  const data = await res.json().catch(() => null)
+  const choice = data?.choices?.[0]
+  const text = typeof choice?.message?.content === 'string' ? choice.message.content : ''
+  if (!text.trim() && choice?.finish_reason === 'length') throw new Error('Groq ran out of room before it finished answering.')
+  return text
+}
+
+const ASKERS = { groq: askGroq, xai: askXai, anthropic: askAnthropic }
+
 export async function ask(cfg, system, userText, maxTokens = 2048) {
   try {
-    return await (cfg.provider === 'anthropic' ? askAnthropic : askXai)(cfg, system, userText, maxTokens)
+    return await (ASKERS[cfg.provider] ?? askGroq)(cfg, system, userText, maxTokens)
   } catch (e) {
     if (e instanceof TypeError) throw new Error(`Could not reach ${providerOf(cfg).label}. Check your internet connection.`)
     throw e

@@ -53,6 +53,7 @@ $('save').onclick = async () => {
 }
 
 const HINTS = {
+  groq: 'Get a key at console.groq.com/keys. Check your account\'s limits page for what the free plan allows. When the daily limit runs out or a request fails, the built-in drafts are used.',
   xai: 'Get a key at console.x.ai. Check there what your free quota covers. When it runs out or a request fails, the built-in drafts are used.',
   anthropic: 'Get a key at platform.claude.com, in a workspace with a low monthly spend limit. It is billed to your Anthropic account, separately from any Claude.ai plan.',
 }
