@@ -1,10 +1,10 @@
-import type { Person, UiState, Video } from './types'
+import type { Person, UiState } from './types'
 import { EMPTY_STATE } from './types'
-import { DEMO_PEOPLE, DEMO_VIDEOS } from './demo'
+import { DEMO_PEOPLE } from './demo'
 
 // Two ways to run:
 //  local   `npm run dev` on your computer. Files in the jolt_outreach folder are read and saved by a small local service.
-//  online  the hosted page. People and videos are read from the data branch on GitHub, which the hourly job updates.
+//  online  the hosted page. People are read from the data branch on GitHub, which the hourly job updates.
 //          Your statuses are saved in this browser only.
 export type Mode = 'local' | 'online'
 
@@ -12,7 +12,6 @@ export type Loaded = {
   mode: Mode
   dir: string
   people: Person[]
-  videos: Video[]
   state: UiState
   demo: boolean
 }
@@ -58,25 +57,24 @@ async function fetchRemote<T>(file: string): Promise<T | null> {
 
 export async function load(): Promise<Loaded> {
   // On the hosted page the data always comes from GitHub, so don't look for a local service there.
-  const data = DATA_REPO ? null : await fetchLocal<{ dir: string; people: Person[]; videos: Video[] }>('data')
-  let people: Person[], videos: Video[], dir = ''
+  const data = DATA_REPO ? null : await fetchLocal<{ dir: string; people: Person[] }>('data')
+  let people: Person[]
+  let dir = ''
   let saved: Partial<UiState> | null
   if (data) {
     mode = 'local'
-    ;({ people, videos, dir } = data)
+    ;({ people, dir } = data)
     saved = await fetchLocal<Partial<UiState> | null>('state')
   } else {
     mode = 'online'
     people = (await fetchRemote<Person[]>('people.json')) ?? []
-    videos = (await fetchRemote<Video[]>('videos.json')) ?? []
     saved = read<Partial<UiState> | null>(STATE_KEY, null)
   }
-  const demo = people.length === 0 && videos.length === 0
+  const demo = people.length === 0
   return {
     mode,
     dir,
     people: demo ? DEMO_PEOPLE : people,
-    videos: demo ? DEMO_VIDEOS : videos,
     state: { ...EMPTY_STATE, ...saved, cfg: { ...EMPTY_STATE.cfg, ...saved?.cfg } },
     demo,
   }

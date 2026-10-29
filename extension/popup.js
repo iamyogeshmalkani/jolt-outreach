@@ -12,7 +12,7 @@ async function render() {
 
   let state = 'Idle.'
   if (!s.token) state = 'Add your GitHub token in Settings to start.'
-  else if (status.running) state = status.task === 'people' ? 'Finding people. A small Chrome window is open, so leave it alone.' : 'Finding videos. A small Chrome window is open, so leave it alone.'
+  else if (status.running) state = 'Finding people. A small Chrome window is open, so leave it alone.'
   else if (status.message) state = status.message
   else if (status.lastRun) state = `Last run ${new Date(status.lastRun.at).toLocaleTimeString()}.`
   $('state').textContent = state
@@ -22,15 +22,14 @@ async function render() {
   $('resume').hidden = !s.paused
   $('enabled').checked = s.enabled
   $('claude').textContent = s.aiKey && s.useAi
-    ? `Drafts are written by ${PROVIDERS[s.aiProvider]?.label ?? 'AI'} (${modelOf({ provider: s.aiProvider, model: s.aiModel })}).`
-    : 'Drafts use the built-in templates.'
+    ? `Opening lines are written by ${PROVIDERS[s.aiProvider]?.label ?? 'AI'} (${modelOf({ provider: s.aiProvider, model: s.aiModel })}).`
+    : 'Opening lines use the built-in templates.'
   $('hours').textContent = `Runs between ${s.startHour}:00 and ${s.endHour}:00 while Chrome is open.`
-  $('videos').disabled = $('people').disabled = Boolean(status.running)
+  $('people').disabled = Boolean(status.running)
   $('log').textContent = log.join('\n') || 'Nothing yet.'
 }
 
-$('videos').onclick = () => send({ type: 'run', task: 'videos' })
-$('people').onclick = () => send({ type: 'run', task: 'people' })
+$('people').onclick = () => send({ type: 'run' })
 $('resume').onclick = () => send({ type: 'resume' })
 $('enabled').onchange = async (e) => {
   const { settings = {} } = await chrome.storage.local.get('settings')

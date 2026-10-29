@@ -3,7 +3,7 @@
 import { publish, fetchKnown } from './lib/github.js'
 import { clickCard, closeVideo, readCommentsPage, readGuard, readOpenVideo, readSearchCards } from './lib/pages.js'
 import { DEFAULTS } from './lib/settings.js'
-import { Stop, findPeople, findVideos } from './lib/tasks.js'
+import { Stop, findPeople } from './lib/tasks.js'
 import { improve } from './lib/llm.js'
 
 const store = chrome.storage.local
@@ -74,7 +74,7 @@ function makeBrowser(tabId) {
 // --------------------------------------------------------------- one run
 let busy = false
 
-async function run(task, manual, delayMs = 0) {
+async function run(manual, delayMs = 0) {
   if (busy) return
   const s = await getSettings()
   if (!manual && (s.paused || !s.enabled)) return
@@ -87,36 +87,35 @@ async function run(task, manual, delayMs = 0) {
   let win
   try {
     if (delayMs) await sleep(delayMs) // random timing, so hourly runs don't land on the exact minute
-    await patchStatus({ running: true, task, error: '', message: '' })
-    await log(`Started: ${task === 'people' ? 'finding people' : 'finding videos'}`)
+    await patchStatus({ running: true, error: '', message: '' })
+    await log('Started: finding people')
     const cfg = { repo: s.repo.trim(), token: s.token.trim(), ...(s.api ? { api: s.api } : {}) } // `api` is only set by tests
     const known = await fetchKnown(cfg)
     for (const h of s.skip.split(/\s+/).filter(Boolean)) known.handles.add(h.toLowerCase().replace(/^@/, ''))
     const { seen: saved = {} } = await store.get('seen')
-    const seen = { urls: new Set(saved.urls || []), handles: new Set(saved.handles || []) }
+    const seen = { handles: new Set(saved.handles || []) }
 
     win = await chrome.windows.create({ url: 'about:blank', focused: false }) // no fixed size: a size that does not fit the screen is rejected
     const browser = makeBrowser(win.tabs[0].id)
-    const result = await (task === 'people' ? findPeople : findVideos)(browser, known, seen, log)
+    const result = await findPeople(browser, known, seen, log)
 
-    const found = result.people.length + result.videos.length
+    const found = result.people.length
     if (found && s.aiKey && s.useAi) {
       await improve({ provider: s.aiProvider, key: s.aiKey.trim(), model: s.aiModel, ...(s.aiApi ? { api: s.aiApi } : {}) }, result, log) // `aiApi` is only set by tests
     }
     if (found) await publish(cfg, result)
-    await store.set({ seen: { urls: [...seen.urls].slice(-3000), handles: [...seen.handles].slice(-3000) } })
+    await store.set({ seen: { handles: [...seen.handles].slice(-3000) } })
 
-    const what = task === 'people' ? `${result.people.length} people` : `${result.videos.length} videos`
     if (result.stopped) {
       if (!manual) await store.set({ settings: { ...s, paused: true } })
-      await patchStatus({ error: result.stopped, message: found ? `Saved ${what} before stopping.` : '' })
+      await patchStatus({ error: result.stopped, message: found ? `Saved ${found} people before stopping.` : '' })
     } else {
-      await patchStatus({ message: found ? `Saved ${what}. The page shows them within about 5 minutes.` : 'Nothing new found this time.' })
+      await patchStatus({ message: found ? `Saved ${found} people. The page shows them within about 5 minutes.` : 'Nothing new found this time.' })
     }
-    await patchStatus({ lastRun: { at: Date.now(), task, found } })
+    await patchStatus({ lastRun: { at: Date.now(), found } })
     chrome.action.setBadgeBackgroundColor({ color: '#b5fc4f' })
     chrome.action.setBadgeText({ text: found ? String(found) : '' })
-    await log(result.stopped ? `Stopped: ${result.stopped}` : `Done: ${what}`)
+    await log(result.stopped ? `Stopped: ${result.stopped}` : `Done: ${found} people`)
   } catch (e) {
     await patchStatus({ error: e.message || String(e) })
     await log(`Failed: ${e.message || e}`)
@@ -129,35 +128,31 @@ async function run(task, manual, delayMs = 0) {
 }
 
 // -------------------------------------------------------------- schedule
+// One alarm: look for people every hour. Older versions also set a video alarm, so an update clears all alarms first.
 async function schedule() {
   const s = await getSettings()
   if (!s.enabled) {
     await chrome.alarms.clearAll()
     return
   }
-  if (!(await chrome.alarms.get('videos'))) {
-    chrome.alarms.create('videos', { delayInMinutes: 3 + Math.random() * 10, periodInMinutes: 60 })
-  }
   if (!(await chrome.alarms.get('people'))) {
-    const next = new Date()
-    next.setHours(9, 6, 0, 0)
-    if (next < new Date()) next.setDate(next.getDate() + 1)
-    chrome.alarms.create('people', { when: next.getTime(), periodInMinutes: 1440 })
+    chrome.alarms.create('people', { delayInMinutes: 3 + Math.random() * 10, periodInMinutes: 60 })
   }
 }
 
-chrome.runtime.onInstalled.addListener(schedule)
+chrome.runtime.onInstalled.addListener(() => chrome.alarms.clearAll().then(schedule))
 chrome.runtime.onStartup.addListener(schedule)
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name !== 'people') return
   const s = await getSettings()
   const hour = new Date().getHours()
   if (hour < s.startHour || hour >= s.endHour) return
-  run(alarm.name === 'people' ? 'people' : 'videos', false, Math.random() * 150_000)
+  run(false, Math.random() * 150_000)
 })
 
 chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.type === 'run') run(msg.task, true)
+  if (msg.type === 'run') run(true)
   if (msg.type === 'resume') getSettings().then((s) => store.set({ settings: { ...s, paused: false } })).then(() => patchStatus({ error: '' }))
   if (msg.type === 'reschedule') chrome.alarms.clearAll().then(schedule)
 })

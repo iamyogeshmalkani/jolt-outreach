@@ -32,44 +32,15 @@ test('priority and opening lines', () => {
   assert.equal(r.opener(long), 'Saw your comment: “the other night, I was half-asleep and my thumb started scrolling…”')
 })
 
-test('parses counts', () => {
-  assert.deepEqual(['1.2K', '3M', '1,234', '87', '', 'n/a'].map(r.parseCount), [1200, 3000000, 1234, 87, 0, 0])
-})
-
-test('video filter', () => {
-  const cases = [
-    ["Why I can't stop doomscrolling at night #doomscrolling", 4200, true],
-    ['my dopamine detox: day 7', 900, true],
-    ['doomscrolling is how I cope with my depression', 5000, false],
-    ["I'm 15 and my phone addiction is bad", 3000, false],
-    ['get ready with me', 8000, false],
-    ['phone addiction is real', 1, false],
-    ['phone addiction is real', 2, true],
-    ['', 5000, false],
-  ]
-  for (const [caption, n, want] of cases) assert.equal(r.isVideoCandidate(caption, n), want, caption)
-})
-
-test('drafted comments follow our own rules', () => {
-  for (const cap of ['doomscrolling', 'dopamine detox', 'screen time', 'brain rot', 'zzz']) {
-    for (let i = 0; i < 20; i++) assert.ok(r.commentOk(r.templateComment(cap)), cap)
-  }
-  assert.equal(r.commentOk('Check out Jolt, link in bio'), false)
-  assert.equal(r.commentOk('use our app'), false)
-  assert.equal(r.commentOk('too short'), false)
-})
-
 test('query rotation is steady within an hour and different across hours', () => {
-  assert.deepEqual(r.pickQueries(r.VIDEO_QUERIES, 2, 100), r.pickQueries(r.VIDEO_QUERIES, 2, 100))
-  const hours = new Set(Array.from({ length: 20 }, (_, i) => r.pickQueries(r.VIDEO_QUERIES, 2, i).join('|')))
+  assert.deepEqual(r.pickQueries(r.QUERIES, 2, 100), r.pickQueries(r.QUERIES, 2, 100))
+  const hours = new Set(Array.from({ length: 20 }, (_, i) => r.pickQueries(r.QUERIES, 2, i).join('|')))
   assert.ok(hours.size > 5)
-  assert.equal(r.pickQueries(r.VIDEO_QUERIES, 2, 7).length, 2)
+  assert.equal(r.pickQueries(r.QUERIES, 2, 7).length, 2)
 })
 
 test('saved shapes match what the page reads', () => {
   const p = r.makePerson({ handle: 'a', text: 'I study and scroll my phone for hours' }, { creator: 'c', query: 'q', url: 'u' }, '2026-10-29')
   assert.deepEqual(Object.keys(p).sort(), ['added', 'comment', 'handle', 'note', 'opener', 'priority', 'source', 'url'])
   assert.match(p.note, /18\+/)
-  const v = r.makeVideo({ caption: 'doomscrolling', likes: '1K', comments: '50' }, { creator: 'c', url: 'u', query: 'q' }, '2026-10-29')
-  assert.deepEqual(Object.keys(v).sort(), ['added', 'caption', 'comments', 'creator', 'draft', 'likes', 'source', 'url'])
 })

@@ -95,84 +95,74 @@ def main():
         print("extension loaded:", ext_id)
         ctx.route("https://www.tiktok.com/**", tiktok)
 
-        # 1. hourly and daily alarms are scheduled
+        # 1. one hourly alarm, for people
         time.sleep(1)
         alarms = sorted(a["name"] for a in sw.evaluate("chrome.alarms.getAll()"))
-        assert alarms == ["people", "videos"], alarms
+        assert alarms == ["people"], alarms
         print("alarms scheduled:", alarms)
 
-        # 2. popup asks for a token first
+        # 2. popup asks for a token first, and offers only one action
         popup = ctx.new_page()
         popup.goto(f"chrome-extension://{ext_id}/popup.html")
         popup.wait_for_function("document.getElementById('state').textContent.length > 0")
         assert "Add your GitHub token" in popup.inner_text("#state"), popup.inner_text("#state")
+        assert popup.query_selector("#videos") is None and popup.inner_text("#people") == "Find people now"
         print("popup before setup:", popup.inner_text("#state"))
 
-        # 3. settings page validates input
+        # 3. settings page: validates input, and offers only the two providers
         opts = ctx.new_page()
         opts.goto(f"chrome-extension://{ext_id}/options.html")
+        providers = opts.eval_on_selector_all("#aiProvider option", "els => els.map(e => e.value)")
+        assert providers == ["groq", "anthropic"], providers
         opts.fill("#repo", "not a repo")
         opts.fill("#token", "x")
         opts.click("#save")
         opts.wait_for_function("document.getElementById('msg').textContent.length > 0")
         assert "owner/name" in opts.inner_text("#msg")
-        print("settings validation:", opts.inner_text("#msg"))
+        print("settings validation:", opts.inner_text("#msg"), "| providers:", providers)
 
-        # 4. a full videos run
-        sw.evaluate("api => chrome.storage.local.set({settings: {repo: 'o/r', token: 'good', api, aiApi: api, aiProvider: 'groq', aiKey: 'sk-test', aiModel: '', useAi: true, enabled: true, startHour: 0, endHour: 24, skip: '', paused: False}})".replace("False", "false"), api)
+        # 4. a full people run, with opening lines written by (mock) Groq
+        sw.evaluate("api => chrome.storage.local.set({settings: {repo: 'o/r', token: 'good', api, aiApi: api, aiProvider: 'groq', aiKey: 'sk-test', aiModel: '', useAi: true, enabled: true, startHour: 0, endHour: 24, skip: '', paused: false}})", api)
         popup.reload()
-        popup.wait_for_function("!document.getElementById('videos').disabled")
-        popup.click("#videos")
-        status = wait_idle(sw)
-        assert not status.get("error"), status
-        videos = json.loads(FILES["videos.json"]["text"])
-        assert 1 <= len(videos) <= 2, videos
-        assert all(v["draft"] and "jolt" not in v["draft"].lower() and v["comments"] == "40" for v in videos)
-        assert all(v["creator"] in ("maker1", "maker2") for v in videos), "the off-topic result must not be queued"
-        assert all("doomscrolling" in v["caption"] or "dopamine" in v["caption"] for v in videos)
-        assert PUTS[0][1]["branch"] == "data"
-        assert all(v["draft"].startswith("Groq comment number") for v in videos), [v["draft"] for v in videos]
-        path, call = AI_CALLS[0]
-        assert len(AI_CALLS) == 1 and path == "/openai/v1/chat/completions" and call["model"] == "openai/gpt-oss-20b", AI_CALLS
-        user = next(m["content"] for m in call["messages"] if m["role"] == "user")
-        assert sorted(json.loads(user)) == sorted(v["caption"] for v in videos)
-        print(f"videos run ok: {len(videos)} videos published, drafted by Groq: {videos[0]['draft']!r}")
-        popup.wait_for_function("document.getElementById('state').textContent.includes('Saved')")
-        print("popup after run:", popup.inner_text("#state"))
-
-        # 5. running again does not queue the same creators twice
-        popup.click("#videos")
-        wait_idle(sw)
-        after = [v["creator"] for v in json.loads(FILES["videos.json"]["text"])]
-        assert len(after) == len(set(after)) and set(after) <= {"maker1", "maker2"}, after
-        print("second run: no duplicate creators:", after)
-
-        # 6. a people run
+        popup.wait_for_function("!document.getElementById('people').disabled")
         popup.click("#people")
         status = wait_idle(sw, timeout=420)
         assert not status.get("error"), status
         people = json.loads(FILES["people.json"]["text"])
-        assert people and all(x["opener"] and x["priority"] in "AB" for x in people), people
+        assert 1 <= len(people) <= 8, len(people)
         assert all(x["handle"].startswith("fan") and "reply that must be ignored" not in x["comment"] for x in people)
-        assert all(x["opener"].startswith("Groq opener number") for x in people), [x["opener"] for x in people][:3]
+        assert all(x["opener"].startswith("Groq opener number") and x["priority"] in "AB" for x in people), [x["opener"] for x in people][:3]
+        path, call = AI_CALLS[0]
+        assert len(AI_CALLS) == 1 and path == "/openai/v1/chat/completions" and call["model"] == "openai/gpt-oss-20b", AI_CALLS
+        assert PUTS[0][0] == "people.json" and PUTS[0][1]["branch"] == "data"
+        assert "videos.json" not in FILES
         print(f"people run ok: {len(people)} people published, opening line by Groq: {people[0]['opener']!r}")
+        popup.wait_for_function("document.getElementById('state').textContent.includes('Saved')")
+        print("popup after run:", popup.inner_text("#state"))
 
-        # 6b. a wrong AI key never breaks a run: the built-in drafts are used and the reason is logged
+        # 5. running again never saves the same person twice
+        popup.click("#people")
+        wait_idle(sw, timeout=420)
+        handles = [x["handle"] for x in json.loads(FILES["people.json"]["text"])]
+        assert len(handles) == len(set(handles)), handles
+        print("second run: no duplicate people:", len(handles), "in total")
+
+        # 6. a wrong AI key never breaks a run: the built-in opening lines are used and the reason is logged
         sw.evaluate("chrome.storage.local.get('settings').then(r => chrome.storage.local.set({settings: {...r.settings, aiKey: 'wrong'}, seen: {}}))")
-        FILES.pop("videos.json")
-        popup.click("#videos")
-        status = wait_idle(sw)
+        FILES.pop("people.json")
+        popup.click("#people")
+        status = wait_idle(sw, timeout=420)
         assert not status.get("error"), status
-        fallback = json.loads(FILES["videos.json"]["text"])
-        assert fallback and all(not v["draft"].startswith("Groq") and len(v["draft"]) > 10 for v in fallback), fallback
+        fallback = json.loads(FILES["people.json"]["text"])
+        assert fallback and all(not x["opener"].startswith("Groq") and len(x["opener"]) > 10 for x in fallback), fallback
         log = sw.evaluate("chrome.storage.local.get('log').then(r => r.log.join('\\n'))")
         assert "did not accept the API key" in log, log[-400:]
-        print("wrong AI key: run still saved", len(fallback), "videos with the built-in drafts")
+        print("wrong AI key: run still saved", len(fallback), "people with the built-in opening lines")
 
         # 7. a verification check pauses the hourly runs
         ctx.unroute("https://www.tiktok.com/**")
         ctx.route("https://www.tiktok.com/**", lambda r: r.fulfill(status=200, content_type="text/html", body="<body>Please verify to continue</body>"))
-        popup.click("#videos")
+        popup.click("#people")
         status = wait_idle(sw)
         assert "verification" in status["error"], status
         print("verification check reported:", status["error"])

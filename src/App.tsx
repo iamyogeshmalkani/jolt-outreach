@@ -10,11 +10,11 @@ export default function App() {
     load().then(setLoaded, (e: Error) => setError(e.message))
   }, [])
 
-  // Pick up new people and videos without losing your place or your edits.
+  // Pick up new people without losing your place or your edits.
   const refresh = useCallback(
     () =>
       load().then(
-        (next) => setLoaded((prev) => (prev ? { ...prev, people: next.people, videos: next.videos, demo: next.demo } : prev)),
+        (next) => setLoaded((prev) => (prev ? { ...prev, people: next.people, demo: next.demo } : prev)),
         () => {},
       ),
     [],

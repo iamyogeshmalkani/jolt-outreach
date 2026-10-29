@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { saveState, type Loaded } from './api'
 import { buildItems, isToday, type Item } from './helpers'
-import { DAILY_LIMIT, STATUSES, VIEWS, type Kind, type UiState } from './types'
+import { DAILY_LIMIT, STATUSES, VIEWS, type UiState } from './types'
 import Queue from './Queue'
 import Conversation from './Conversation'
 import TemplateDialog from './TemplateDialog'
@@ -10,26 +10,16 @@ type SaveState = 'saved' | 'saving' | 'error'
 
 export default function Workbench({ loaded }: { loaded: Loaded }) {
   const [ui, setUi] = useState<UiState>(loaded.state)
-  // Open on whichever list has something in it.
-  const [kind, setKind] = useState<Kind>(!loaded.demo && loaded.people.length === 0 && loaded.videos.length > 0 ? 'videos' : 'people')
-  const [views, setViews] = useState<Record<Kind, number>>({ people: 0, videos: 0 })
-  const [selected, setSelected] = useState<Record<Kind, string | null>>({ people: null, videos: null })
+  const [view, setView] = useState(0)
+  const [selected, setSelected] = useState<string | null>(null)
   const [pane, setPane] = useState<'list' | 'detail'>('list')
   const [saveStatus, setSaveStatus] = useState<SaveState>('saved')
   const [templateOpen, setTemplateOpen] = useState(false)
   const online = loaded.mode === 'online'
 
-  const statuses = STATUSES[kind]
-  const other =
-    kind === 'people'
-      ? { kind: 'videos' as Kind, label: 'Comments', noun: 'videos', count: loaded.videos.length }
-      : { kind: 'people' as Kind, label: 'Messages', noun: 'people', count: loaded.people.length }
-  const viewDefs = VIEWS[kind]
-  const view = views[kind]
-  const items = useMemo(
-    () => buildItems(kind, loaded.people, loaded.videos, ui.cfg),
-    [kind, loaded.people, loaded.videos, ui.cfg],
-  )
+  const statuses = STATUSES
+  const viewDefs = VIEWS
+  const items = useMemo(() => buildItems(loaded.people, ui.cfg), [loaded.people, ui.cfg])
   const statusOf = useCallback((i: Item) => ui.statuses[i.key] ?? statuses[0], [ui.statuses, statuses])
   const viewOf = useCallback(
     (i: Item) => viewDefs.findIndex((v) => v.at.includes(statuses.indexOf(statusOf(i)))),
@@ -44,7 +34,7 @@ export default function Workbench({ loaded }: { loaded: Loaded }) {
         .sort((a, b) => Number(b.priority === 'A') - Number(a.priority === 'A')),
     [items, view, viewOf],
   )
-  const current = visible.find((i) => i.key === selected[kind]) ?? visible[0] ?? null
+  const current = visible.find((i) => i.key === selected) ?? visible[0] ?? null
 
   const viewCounts = useMemo(
     () => viewDefs.map((v, n) => ({ label: v.label, count: items.filter((i) => viewOf(i) === n).length })),
@@ -71,7 +61,7 @@ export default function Workbench({ loaded }: { loaded: Loaded }) {
   }, [ui])
 
   const select = (key: string) => {
-    setSelected((s) => ({ ...s, [kind]: key }))
+    setSelected(key)
     setPane('detail')
   }
 
@@ -80,9 +70,9 @@ export default function Workbench({ loaded }: { loaded: Loaded }) {
       if (!visible.length) return
       const idx = Math.max(0, visible.findIndex((i) => i.key === current?.key))
       const next = visible[Math.min(visible.length - 1, Math.max(0, idx + delta))]
-      setSelected((s) => ({ ...s, [kind]: next.key }))
+      setSelected(next.key)
     },
-    [visible, current, kind],
+    [visible, current],
   )
 
   const setStatus = useCallback(
@@ -92,7 +82,7 @@ export default function Workbench({ loaded }: { loaded: Loaded }) {
       if (!viewDefs[view].at.includes(idx)) {
         const at = visible.findIndex((i) => i.key === item.key)
         const neighbour = visible[at + 1] ?? visible[at - 1]
-        setSelected((s) => ({ ...s, [kind]: neighbour?.key ?? null }))
+        setSelected(neighbour?.key ?? null)
       }
       setUi((u) => {
         const doneAt = { ...u.doneAt }
@@ -102,7 +92,7 @@ export default function Workbench({ loaded }: { loaded: Loaded }) {
         return { ...u, statuses: { ...u.statuses, [item.key]: status }, doneAt }
       })
     },
-    [statuses, viewDefs, view, visible, kind],
+    [statuses, viewDefs, view, visible],
   )
 
   const setReply = (item: Item, text: string | null) =>
@@ -132,20 +122,8 @@ export default function Workbench({ loaded }: { loaded: Loaded }) {
     <div className="app" data-pane={pane}>
       <header className="bar">
         <h1><i className="mark" aria-hidden="true" />Jolt outreach</h1>
-        <nav className="tabs" aria-label="What to work on">
-          {(['people', 'videos'] as Kind[]).map((k) => (
-            <button
-              key={k}
-              aria-current={k === kind ? 'page' : undefined}
-              onClick={() => { setKind(k); setPane('list') }}
-            >
-              {k === 'people' ? 'Messages' : 'Comments'}
-              <span className="count">{k === 'people' ? loaded.people.length : loaded.videos.length}</span>
-            </button>
-          ))}
-        </nav>
         <div className="bar-end">
-          {kind === 'people' && <button className="quiet" onClick={() => setTemplateOpen(true)}>Message template</button>}
+          <button className="quiet" onClick={() => setTemplateOpen(true)}>Message template</button>
           {online && <span className="save">Statuses are saved in this browser</span>}
           {saveStatus !== 'saved' && (
             <span className={`save save-${saveStatus}`} role="status">
@@ -164,7 +142,7 @@ export default function Workbench({ loaded }: { loaded: Loaded }) {
             </>
           ) : (
             <>
-              Sample data. Run <code>npm run find</code> and <code>npm run videos</code>, then reload. Real data is read from{' '}
+              Sample data. Run <code>npm run find</code>, then reload. Real data is read from{' '}
               <code>{loaded.dir}</code>.
             </>
           )}
@@ -174,14 +152,13 @@ export default function Workbench({ loaded }: { loaded: Loaded }) {
       <Queue
         views={viewCounts}
         view={view}
-        onView={(n) => setViews((s) => ({ ...s, [kind]: n }))}
+        onView={setView}
         items={visible}
         currentKey={current?.key}
         statusOf={statusOf}
         onSelect={select}
         doneToday={doneToday}
-        limit={DAILY_LIMIT[kind]}
-        verb={kind === 'people' ? 'sent' : 'posted'}
+        limit={DAILY_LIMIT}
         total={items.length}
       />
 
@@ -197,13 +174,7 @@ export default function Workbench({ loaded }: { loaded: Loaded }) {
         onBack={() => setPane('list')}
         registerCopy={(fn) => { copyRef.current = fn }}
         emptyView={items.length > 0}
-        elsewhere={
-          items.length === 0 && other.count > 0
-            ? { noun: other.noun, label: other.label, count: other.count, go: () => { setKind(other.kind); setPane('list') } }
-            : undefined
-        }
         online={online}
-        kind={kind}
       />
 
       <TemplateDialog

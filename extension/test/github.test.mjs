@@ -55,8 +55,8 @@ test('publishes people and keeps what was already there, including non-English t
 test('creates a file that does not exist yet', async () => {
   const { state, server, api } = await fakeGitHub()
   try {
-    await publish(cfg(api), { videos: [{ url: 'https://tiktok.com/@a/video/1', creator: 'a' }] })
-    assert.equal(JSON.parse(state.files['videos.json'].text).length, 1)
+    await publish(cfg(api), { people: [{ handle: 'first' }] })
+    assert.equal(JSON.parse(state.files['people.json'].text).length, 1)
     assert.equal(state.puts[0].data.sha, undefined)
   } finally { server.close() }
 })
@@ -81,14 +81,11 @@ test('explains a rejected token and a missing branch in plain words', async () =
   } finally { missing.server.close() }
 })
 
-test('knows what is already published', async () => {
-  const { server, api } = await fakeGitHub({ files: {
-    'people.json': { sha: 'a', text: JSON.stringify([{ handle: 'Someone' }]) },
-    'videos.json': { sha: 'b', text: JSON.stringify([{ url: 'u1', creator: 'Maker' }]) },
-  } })
+test('knows who is already published', async () => {
+  const { server, api } = await fakeGitHub({ files: { 'people.json': { sha: 'a', text: JSON.stringify([{ handle: 'Someone' }]) } } })
   try {
     const known = await fetchKnown(cfg(api))
-    assert.ok(known.handles.has('someone') && known.urls.has('u1') && known.creators.has('maker'))
+    assert.ok(known.handles.has('someone'))
   } finally { server.close() }
 })
 

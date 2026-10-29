@@ -15,9 +15,6 @@ export const PROMO = /https?:\/\/|www\.|use my code|referral|promo|(?=[A-Z0-9]*\
 export const PRIORITY_A =
   /stopped working|didn'?t work|only worked|worked for|came back|relapse|tried|opal|one ?sec|brick|screenzen|freedom|forest|clearspace|jomo|headway|blinkist|ignore|bypass|5 more minutes|can'?t figure|don'?t know how|how (do|can) (i|you)|\d+ ?(hrs|hours)/i
 export const STUDY = /\b(study|studying|exam|exams|class|classes|school)\b/i
-export const TOPIC =
-  /scroll|screen ?time|phone addict|doom|dopamine|detox|brain ?rot|digital minimal|phone habit|attention span|put (my|the|your) phone down/i
-export const BAD_COMMENT = /jolt|https?:\/\/|www\.|\bapp\b|download|dm me|link in|promo|code/i
 
 export const QUERIES = [
   'opal app review', 'one sec app', 'brick phone blocker review', 'screenzen app', 'forest app focus',
@@ -26,16 +23,11 @@ export const QUERIES = [
   'my screen time is embarrassing', 'phone addiction', 'dopamine detox', 'brain rot scrolling',
   'how to stop scrolling', 'screen time reveal',
 ]
-export const VIDEO_QUERIES = [
-  'i cant stop doomscrolling', 'doomscrolling', 'phone addiction', 'dopamine detox', 'digital detox',
-  'screen time reveal', 'how to stop scrolling', 'brain rot scrolling', 'my screen time is embarrassing',
-  'digital minimalism', 'attention span phone',
-]
 
+// One run is small on purpose: it runs every hour, so the day's total adds up without any single run being long.
 export const LIMITS = {
-  targetPeople: 20, peopleQueries: 4, peopleVideos: 8,
-  videoQueries: 2, videoScan: 6, videoMax: 2, minComments: 2,
-  maxPeople: 300, maxVideos: 150,
+  targetPeople: 8, peopleQueries: 2, peopleVideos: 3,
+  maxPeople: 300,
 }
 
 const OPENERS = [
@@ -46,34 +38,6 @@ const OPENERS = [
   [/bored/i, 'Your comment about boredom and scrolling really stuck with me.'],
   [/focus|distract|study/i, 'Saw your comment about phone time getting in the way of focus.'],
   [/\d+ ?(hrs|hours)|hours/i, 'Saw your comment about how many hours you spend on your phone.'],
-]
-
-// Drafted comments are questions or observations. They never claim a personal experience
-// and never mention an app, so they read as a real viewer joining the conversation.
-const COMMENT_STARTERS = [
-  [/doom/i, [
-    "What's the hardest part for you: starting to scroll, or stopping once you've started?",
-    'Do you think doomscrolling is more about boredom or about avoiding something? Genuinely curious.',
-    "The 'just one more' feeling is the part that gets me thinking. What actually breaks it for people?",
-  ]],
-  [/dopamine|detox/i, [
-    'Curious how long it took before this started to feel easier, and what made you stick with it?',
-    'Do you think the hard part is the detox itself or what you do with the free time afterwards?',
-    'What did you replace the scrolling with? That seems like the part most people skip.',
-  ]],
-  [/screen ?time/i, [
-    'Do you think the number matters, or what the time is being spent on?',
-    'Has seeing the number ever actually changed what you do, or does it fade after a day?',
-    "What would make a screen time limit something you'd actually respect instead of ignore?",
-  ]],
-  [/brain ?rot|attention/i, [
-    'Do you notice it more in how long you can focus, or in how quickly you get bored?',
-    'Is it the short videos themselves or the habit of reaching for the phone that feels worse?',
-  ]],
-]
-const COMMENT_DEFAULT = [
-  "This is the part people don't talk about enough. What's helped you most so far?",
-  'Curious what you think is the hardest part of changing this habit.',
 ]
 
 export function isCandidate(handle, text, creator) {
@@ -94,29 +58,7 @@ export function opener(text) {
   return `Saw your comment: “${snippet}”`
 }
 
-export function parseCount(s) {
-  const m = /^([\d.,]+)\s*([KMB]?)/i.exec((s || '').trim())
-  if (!m) return 0
-  const n = parseFloat(m[1].replace(/,/g, ''))
-  if (Number.isNaN(n)) return 0
-  return Math.floor(n * { '': 1, K: 1e3, M: 1e6, B: 1e9 }[m[2].toUpperCase()])
-}
-
-export function isVideoCandidate(caption, comments) {
-  const c = (caption || '').trim()
-  if (comments < LIMITS.minComments || !TOPIC.test(c)) return false
-  return !(SENSITIVE.test(c) || SEXUAL.test(c) || MINOR.test(c))
-}
-
-export function templateComment(caption, rand = Math.random) {
-  const lines = (COMMENT_STARTERS.find(([rx]) => rx.test(caption)) || [null, COMMENT_DEFAULT])[1]
-  return lines[Math.floor(rand() * lines.length)]
-}
-
-export const commentOk = (c) =>
-  typeof c === 'string' && c.trim().length >= 10 && c.trim().length <= 220 && !BAD_COMMENT.test(c)
-
-// ---- shapes saved to people.json and videos.json (what the page reads) ----
+// ---- the shape saved to people.json (what the page reads) ----
 export function makePerson(row, { creator, query, url }, today) {
   return {
     handle: row.handle,
@@ -127,13 +69,6 @@ export function makePerson(row, { creator, query, url }, today) {
     note: STUDY.test(row.text) ? "Mentions studying. Confirm they're 18+ before booking." : '',
     opener: opener(row.text),
     added: today,
-  }
-}
-
-export function makeVideo(info, { creator, url, query }, today) {
-  return {
-    creator, url, caption: info.caption, likes: info.likes, comments: info.comments,
-    source: query, draft: templateComment(info.caption), added: today,
   }
 }
 

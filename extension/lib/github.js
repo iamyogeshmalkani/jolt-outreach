@@ -82,21 +82,15 @@ async function writeMerged(cfg, name, fresh, keyOf, cap) {
   throw new Error(`Could not save ${name} after several tries because it kept changing. Try again.`)
 }
 
-export async function publish(cfg, { people = [], videos = [] }) {
-  const saved = {}
-  if (people.length) saved.people = await writeMerged(cfg, 'people.json', people, (p) => p.handle?.toLowerCase(), LIMITS.maxPeople)
-  if (videos.length) saved.videos = await writeMerged(cfg, 'videos.json', videos, (v) => v.url, LIMITS.maxVideos)
-  return saved
+export async function publish(cfg, { people = [] }) {
+  if (!people.length) return {}
+  return { people: await writeMerged(cfg, 'people.json', people, (p) => p.handle?.toLowerCase(), LIMITS.maxPeople) }
 }
 
-// What is already published, so the same person or video is never queued twice.
+// Who is already published, so the same person is never queued twice.
 export async function fetchKnown(cfg) {
-  const [people, videos] = await Promise.all([readFile(cfg, 'people.json'), readFile(cfg, 'videos.json')])
-  return {
-    handles: new Set(people.items.map((p) => String(p.handle).toLowerCase())),
-    urls: new Set(videos.items.map((v) => v.url)),
-    creators: new Set(videos.items.map((v) => String(v.creator).toLowerCase())),
-  }
+  const people = await readFile(cfg, 'people.json')
+  return { handles: new Set(people.items.map((p) => String(p.handle).toLowerCase())) }
 }
 
 export async function checkAccess(cfg) {

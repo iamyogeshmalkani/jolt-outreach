@@ -10,7 +10,6 @@ type Props = {
   onSelect: (key: string) => void
   doneToday: number
   limit: number
-  verb: string
   total: number
 }
 
@@ -48,7 +47,7 @@ export default function Queue(p: Props) {
       </ul>
 
       <p className={`today${p.doneToday >= p.limit ? ' over' : ''}`}>
-        <b>{p.doneToday}</b> of {p.limit} {p.verb} today
+        <b>{p.doneToday}</b> of {p.limit} sent today
       </p>
     </aside>
   )

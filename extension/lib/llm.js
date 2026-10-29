@@ -1,24 +1,12 @@
-// Optional: an AI model writes the draft comments and the opening lines instead of the fixed templates.
-// Three providers: Groq, Grok (xAI) and Claude (Anthropic). Both are called with plain fetch, because a Chrome extension has
+// Optional: an AI model writes the opening line of each message instead of the fixed templates.
+// Two providers: Groq and Claude (Anthropic). Both are called with plain fetch, because a Chrome extension has
 // no build step to bundle an SDK. Anything that goes wrong falls back to the templates, so a run never fails because of this.
-import { commentOk } from './rules.js'
-
 export const PROVIDERS = {
   groq: { label: 'Groq', model: 'openai/gpt-oss-20b', api: 'https://api.groq.com' },
-  xai: { label: 'Grok', model: 'grok-4.20-0309-non-reasoning', api: 'https://api.x.ai' },
   anthropic: { label: 'Claude', model: 'claude-haiku-5-5', api: 'https://api.anthropic.com' },
 }
 export const providerOf = (cfg) => PROVIDERS[cfg.provider] ?? PROVIDERS.groq
 export const modelOf = (cfg) => cfg.model || providerOf(cfg).model
-
-export const COMMENT_SYSTEM = `You help a researcher join public TikTok conversations about phone and screen-time habits.
-For each video caption you are given, write one short public comment (30 words at most) from an ordinary, curious viewer.
-- Respond to what that caption actually says, and add one thought or ask one genuine question.
-- Never mention any app, product, brand or company.
-- No links, no emoji, no hashtags.
-- No generic praise such as "love this" or "so true".
-- Never claim a personal experience, result or feeling of your own.
-Return only a JSON array of strings, one comment per caption, in the same order.`
 
 export const OPENER_SYSTEM = `You help a researcher write the first line of a friendly private message to someone who commented publicly on TikTok about their own phone habits.
 For each comment you are given, write one warm, casual sentence (22 words at most) that refers to exactly what that person said.
@@ -82,32 +70,6 @@ async function askAnthropic(cfg, system, userText, maxTokens) {
   return (data?.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('')
 }
 
-// ---- xAI (Grok): POST /v1/responses ----
-async function askXai(cfg, system, userText, maxTokens) {
-  const base = cfg.api ?? PROVIDERS.xai.api
-  const send = (input) =>
-    fetch(`${base}/v1/responses`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${cfg.key}` },
-      body: JSON.stringify({ model: modelOf(cfg), max_output_tokens: maxTokens, input }),
-    })
-  let res = await send([
-    { role: 'system', content: system },
-    { role: 'user', content: userText },
-  ])
-  if (res.status === 400) res = await send(`${system}\n\n${userText}`) // if the message form is not accepted, send one plain string
-  if (!res.ok) throw await failure('Grok', res)
-  const data = await res.json().catch(() => null)
-  if (data?.error) throw new Error(explain('Grok', 400, data.error.message || String(data.error)))
-  // The reply can hold reasoning items too, so pick the message text by type.
-  return (data?.output || [])
-    .filter((item) => item.type === 'message')
-    .flatMap((item) => item.content || [])
-    .filter((part) => part.type === 'output_text')
-    .map((part) => part.text)
-    .join('')
-}
-
 // ---- Groq: POST /openai/v1/chat/completions (OpenAI-compatible) ----
 async function askGroq(cfg, system, userText, maxTokens) {
   const base = cfg.api ?? PROVIDERS.groq.api
@@ -132,7 +94,7 @@ async function askGroq(cfg, system, userText, maxTokens) {
   return text
 }
 
-const ASKERS = { groq: askGroq, xai: askXai, anthropic: askAnthropic }
+const ASKERS = { groq: askGroq, anthropic: askAnthropic }
 
 export async function ask(cfg, system, userText, maxTokens = 2048) {
   try {
@@ -163,37 +125,24 @@ export async function suggest(cfg, system, texts) {
   return parseList(text, texts.length)
 }
 
-// Replaces template drafts and openers with the model's, one by one, keeping the template wherever its text breaks our rules.
+// Replaces the template opening lines with the model's, keeping the template wherever its text breaks our rules.
 export async function improve(cfg, result, log = async () => {}) {
   const who = providerOf(cfg).label
-  const used = { comments: 0, openers: 0 }
-  if (result.videos.length) {
-    try {
-      const out = await suggest(cfg, COMMENT_SYSTEM, result.videos.map((v) => v.caption))
-      result.videos.forEach((v, i) => {
-        if (commentOk(out[i])) {
-          v.draft = out[i].trim()
-          used.comments++
-        }
-      })
-    } catch (e) {
-      await log(`${who} comment suggestions unavailable (${e.message}) Used the built-in drafts.`)
-    }
-  }
+  let used = 0
   if (result.people.length) {
     try {
       const out = await suggest(cfg, OPENER_SYSTEM, result.people.map((p) => p.comment))
       result.people.forEach((p, i) => {
         if (openerOk(out[i])) {
           p.opener = out[i].trim()
-          used.openers++
+          used++
         }
       })
     } catch (e) {
       await log(`${who} opening lines unavailable (${e.message}) Used the built-in ones.`)
     }
   }
-  if (used.comments || used.openers) await log(`${who} wrote ${used.comments} draft comments and ${used.openers} opening lines.`)
+  if (used) await log(`${who} wrote ${used} opening lines.`)
   return used
 }
 

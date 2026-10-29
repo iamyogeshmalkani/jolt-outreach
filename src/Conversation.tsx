@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Item } from './helpers'
-import { NEXT_STEP, type Kind } from './types'
+import { NEXT_STEP } from './types'
 
 type Props = {
   item: Item | null
@@ -14,9 +14,7 @@ type Props = {
   onBack: () => void
   registerCopy: (fn: () => void) => void
   emptyView: boolean
-  elsewhere?: { noun: string; label: string; count: number; go: () => void }
   online: boolean
-  kind: Kind
 }
 
 export default function Conversation(p: Props) {
@@ -37,29 +35,21 @@ export default function Conversation(p: Props) {
   }
   useEffect(() => p.registerCopy(copy)) // always points at the latest reply
 
-  const script = `python jolt_outreach.py${p.kind === 'videos' ? ' --videos' : ''}`
-
   if (!p.item) {
     return (
       <main className="convo convo-empty">
         {p.emptyView ? (
           <>
             <h2>All clear here</h2>
-            <p>Pick another view, or run <code>{script}</code> to find more.</p>
+            <p>Pick another view. New people appear here as the finder finds them.</p>
           </>
         ) : (
           <>
-            <h2>No {p.kind === 'people' ? 'people' : 'videos'} yet</h2>
-            {p.elsewhere && (
-              <p>
-                {p.elsewhere.count} {p.elsewhere.noun} found so far.{' '}
-                <button className="quiet" onClick={p.elsewhere.go}>Show {p.elsewhere.label}</button>
-              </p>
-            )}
+            <h2>No people yet</h2>
             <p>
               {p.online
                 ? <>The Jolt finder extension in Chrome publishes here, and this page updates within about 5 minutes.</>
-                : <>Run <code>{script}</code>, then reload this page.</>}
+                : <>Run <code>npm run find</code>, then reload this page.</>}
             </p>
           </>
         )}
@@ -68,11 +58,10 @@ export default function Conversation(p: Props) {
   }
 
   const { item } = p
-  const isPeople = p.kind === 'people'
   const idx = p.statuses.indexOf(p.status)
-  const next = idx <= 2 ? { label: NEXT_STEP[p.kind][idx], to: p.statuses[idx + 1] } : null
+  const next = idx <= 2 ? { label: NEXT_STEP[idx], to: p.statuses[idx + 1] } : null
   const skipped = idx === p.statuses.length - 1
-  const copyLabel = copied ? 'Copied' : isPeople ? 'Copy message' : 'Copy comment'
+  const copyLabel = copied ? 'Copied' : 'Copy message'
 
   return (
     <main className="convo">
@@ -85,7 +74,6 @@ export default function Conversation(p: Props) {
         <div className="links">
           <a href={item.profileUrl} target="_blank" rel="noopener noreferrer">Profile</a>
           <a href={item.sourceUrl} target="_blank" rel="noopener noreferrer">Video</a>
-          {item.facts && <span className="facts">{item.facts}</span>}
         </div>
       </header>
 
@@ -94,7 +82,7 @@ export default function Conversation(p: Props) {
         {item.note && <p className="note">{item.note}</p>}
 
         <div className="out">
-          <label className="sr" htmlFor="reply">{isPeople ? 'Your message' : 'Your comment'}</label>
+          <label className="sr" htmlFor="reply">Your message</label>
           <textarea id="reply" ref={area} value={p.reply} rows={5} onChange={(e) => p.onReply(e.target.value)} />
         </div>
         {p.edited && <button className="quiet restore" onClick={p.onRestore}>Restore original</button>}
@@ -114,7 +102,7 @@ export default function Conversation(p: Props) {
             {idx === 0 && <button className="quiet" onClick={() => p.onStatus(p.statuses[p.statuses.length - 1])}>Skip</button>}
           </>
         )}
-        {idx === 3 && <p className="done">{isPeople ? 'Interview booked.' : 'Moved to a DM.'}</p>}
+        {idx === 3 && <p className="done">Interview booked.</p>}
       </div>
     </main>
   )

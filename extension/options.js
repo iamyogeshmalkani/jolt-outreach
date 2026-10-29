@@ -12,6 +12,7 @@ async function load() {
   const { settings = {} } = await chrome.storage.local.get('settings')
   const s = { ...DEFAULTS, ...settings }
   for (const k of ['repo', 'token', 'startHour', 'endHour', 'skip', 'aiProvider', 'aiKey', 'aiModel']) $(k).value = s[k]
+  if (!PROVIDERS[s.aiProvider]) $('aiProvider').value = DEFAULTS.aiProvider // a provider this version no longer offers
   $('useAi').checked = s.useAi
   explainProvider()
 }
@@ -53,14 +54,13 @@ $('save').onclick = async () => {
 }
 
 const HINTS = {
-  groq: 'Get a key at console.groq.com/keys. Check your account\'s limits page for what the free plan allows. When the daily limit runs out or a request fails, the built-in drafts are used.',
-  xai: 'Get a key at console.x.ai. Check there what your free quota covers. When it runs out or a request fails, the built-in drafts are used.',
+  groq: 'Get a key at console.groq.com/keys. Check your account\'s limits page for what the free plan allows. When the daily limit runs out or a request fails, the built-in opening lines are used.',
   anthropic: 'Get a key at platform.claude.com, in a workspace with a low monthly spend limit. It is billed to your Anthropic account, separately from any Claude.ai plan.',
 }
 function explainProvider() {
   const p = $('aiProvider').value
   $('aiModel').placeholder = PROVIDERS[p].model
-  $('aiHint').textContent = `${HINTS[p]} The key stays in this Chrome and is only sent to ${PROVIDERS[p].label}'s API. Only public captions and comment text are sent.`
+  $('aiHint').textContent = `${HINTS[p]} The key stays in this Chrome and is only sent to ${PROVIDERS[p].label}'s API. Only the public text of each comment is sent.`
 }
 $('aiProvider').addEventListener('change', explainProvider)
 

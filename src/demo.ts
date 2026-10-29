@@ -1,4 +1,4 @@
-import type { Person, Video } from './types'
+import type { Person } from './types'
 
 // Shown only until the Python script has produced real data.
 const day = new Date().toISOString().slice(0, 10)
@@ -28,20 +28,5 @@ export const DEMO_PEOPLE: Person[] = [
     comment: 'I\'m HOOKED to my phone lately and it distracts me so much when I study.',
     opener: 'Saw your comment about phone time getting in the way of focus.',
     source: 'how to stop scrolling · @sample.creator', url: 'https://www.tiktok.com',
-  },
-]
-
-export const DEMO_VIDEOS: Video[] = [
-  {
-    creator: 'sample.creator', url: 'https://www.tiktok.com', added: day, likes: '48K', comments: '1,204',
-    caption: 'Why I can\'t stop doomscrolling at night #doomscrolling',
-    draft: 'What\'s the hardest part for you: starting to scroll, or stopping once you\'ve started?',
-    source: 'doomscrolling',
-  },
-  {
-    creator: 'sample.detox', url: 'https://www.tiktok.com/@sample.detox', added: day, likes: '9.1K', comments: '312',
-    caption: 'my dopamine detox: day 7',
-    draft: 'What did you replace the scrolling with? That seems like the part most people skip.',
-    source: 'dopamine detox',
   },
 ]

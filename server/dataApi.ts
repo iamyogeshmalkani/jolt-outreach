@@ -42,7 +42,6 @@ export function dataApi(): Plugin {
             return send(200, {
               dir: outDir(),
               people: readJson('people.json', []),
-              videos: readJson('videos.json', []),
             })
           }
           if (req.url === '/state' && req.method === 'GET') {

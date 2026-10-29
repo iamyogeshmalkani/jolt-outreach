@@ -35,11 +35,10 @@
     </section>
 
     <section>
-      <h2>Draft comments written by AI (optional)</h2>
+      <h2>Opening lines written by AI (optional)</h2>
       <label>Provider
         <select id="aiProvider">
           <option value="groq">Groq (gpt-oss-20b)</option>
-          <option value="xai">Grok (xAI)</option>
           <option value="anthropic">Claude (Anthropic)</option>
         </select>
       </label>
@@ -49,7 +48,7 @@
       <label>Model <span class="hint">(leave empty for the default)</span>
         <input id="aiModel" autocomplete="off" />
       </label>
-      <label class="check"><input id="useAi" type="checkbox" /> Use it for draft comments and opening lines</label>
+      <label class="check"><input id="useAi" type="checkbox" /> Use it to write the opening line of each message</label>
       <p class="hint" id="aiHint"></p>
     </section>
 

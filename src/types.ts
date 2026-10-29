@@ -9,19 +9,6 @@ export type Person = {
   added: string
 }
 
-export type Video = {
-  creator: string
-  url: string
-  caption: string
-  likes: string
-  comments: string
-  source: string
-  draft: string
-  added: string
-}
-
-export type Kind = 'people' | 'videos'
-
 export type Config = { name: string; offer: string; body: string }
 
 export type UiState = {
@@ -32,34 +19,20 @@ export type UiState = {
   cfg: Config
 }
 
-export const STATUSES: Record<Kind, string[]> = {
-  people: ['To send', 'Sent', 'Replied', 'Booked', 'Skip'],
-  videos: ['To comment', 'Posted', 'Got replies', 'Moved to DM', 'Skip'],
-}
+export const STATUSES = ['To send', 'Sent', 'Replied', 'Booked', 'Skip']
 
 // The four views in the queue. `at` lists which statuses (by position) each view shows.
-export const VIEWS: Record<Kind, { label: string; at: number[] }[]> = {
-  people: [
-    { label: 'To do', at: [0] },
-    { label: 'Sent', at: [1] },
-    { label: 'Replied', at: [2, 3] },
-    { label: 'Skipped', at: [4] },
-  ],
-  videos: [
-    { label: 'To do', at: [0] },
-    { label: 'Posted', at: [1] },
-    { label: 'Replies', at: [2, 3] },
-    { label: 'Skipped', at: [4] },
-  ],
-}
+export const VIEWS: { label: string; at: number[] }[] = [
+  { label: 'To do', at: [0] },
+  { label: 'Sent', at: [1] },
+  { label: 'Replied', at: [2, 3] },
+  { label: 'Skipped', at: [4] },
+]
 
-// Button text for moving an item from status 0, 1 and 2 to the next one.
-export const NEXT_STEP: Record<Kind, string[]> = {
-  people: ['Mark as sent', 'They replied', 'Interview booked'],
-  videos: ['Mark as posted', 'Got replies', 'Moved to a DM'],
-}
+// Button text for moving someone from status 0, 1 and 2 to the next one.
+export const NEXT_STEP = ['Mark as sent', 'They replied', 'Interview booked']
 
-export const DAILY_LIMIT: Record<Kind, number> = { people: 25, videos: 10 }
+export const DAILY_LIMIT = 25
 
 export const DEFAULT_CFG: Config = {
   name: 'Isha',
