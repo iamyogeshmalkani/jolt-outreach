@@ -14,6 +14,7 @@ type Props = {
   onBack: () => void
   registerCopy: (fn: () => void) => void
   emptyView: boolean
+  online: boolean
   kind: Kind
 }
 
@@ -48,7 +49,11 @@ export default function Conversation(p: Props) {
         ) : (
           <>
             <h2>Nothing to show yet</h2>
-            <p>Run <code>{script}</code>, then reload this page.</p>
+            <p>
+              {p.online
+                ? <>The finder runs on GitHub every hour. Check back soon.</>
+                : <>Run <code>{script}</code>, then reload this page.</>}
+            </p>
           </>
         )}
       </main>

@@ -64,6 +64,8 @@ LOOP_QUERIES = 2         # searches per run
 LOOP_SCAN = 6            # videos opened per run
 BACKLOG_CAP = 30         # pause finding more while this many videos still wait to be commented on
 ACTIVE_HOURS = (8, 22)   # hourly mode only runs from the first hour up to (not including) the last
+MAX_PEOPLE = 300         # keep only the newest this many people and videos in the saved lists
+MAX_VIDEOS = 150
 MIN_COMMENTS = 2         # skip videos with fewer comments than this
 OUT_DIR = Path(os.environ.get("JOLT_OUT_DIR") or Path.home() / "jolt_outreach")
 VIDEO_QUERIES = [
@@ -283,6 +285,9 @@ class Stop(Exception):
     pass
 
 
+STOP_REASONS = []   # filled when TikTok asks for a login or verification; makes the run exit with an error
+
+
 def pause(a=1.5, b=4.0):
     time.sleep(random.uniform(a, b))
 
@@ -290,7 +295,9 @@ def pause(a=1.5, b=4.0):
 def guard(page, have_links=True):
     body = page.inner_text("body")[:4000]
     if not have_links and re.search(r"\bLog in\b", body):
-        raise Stop("TikTok is logged out. Run: python jolt_outreach.py --login")
+        raise Stop("The saved TikTok login was rejected. Export a fresh one with npm run export-session."
+                   if os.environ.get("JOLT_SESSION")
+                   else "TikTok is logged out. Run: python jolt_outreach.py --login")
     if re.search(r"captcha|verify to continue|drag the slider|are you human", body, re.I):
         raise Stop("TikTok is showing a verification check. Solve it in the browser, then run again.")
 
@@ -308,6 +315,10 @@ def open_comments(page):
 
 
 def launch(pw):
+    session = os.environ.get("JOLT_SESSION")
+    if session:  # online run (GitHub): use a saved TikTok login instead of a profile folder
+        browser = pw.chromium.launch(channel="chrome", headless=False)
+        return browser.new_context(storage_state=session, viewport={"width": 1536, "height": 800})
     OUT_DIR.mkdir(exist_ok=True)
     kwargs = dict(user_data_dir=str(OUT_DIR / "chrome-profile"), headless=False,
                   viewport={"width": 1536, "height": 800})
@@ -326,6 +337,22 @@ def do_login():
         input("Log into TikTok in the browser window, then press Enter here... ")
         ctx.close()
     print("Saved. Now run: python jolt_outreach.py")
+
+
+def export_session(path):
+    """Save the TikTok login from the local profile so an online job can use it. Treat it like a password."""
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as pw:
+        ctx = launch(pw)
+        state = ctx.storage_state()
+        ctx.close()
+    state["origins"] = []  # cookies carry the login; dropping page storage keeps this under GitHub's secret size limit
+    Path(path).write_text(json.dumps(state), encoding="utf-8")
+    os.chmod(path, 0o600)
+    if Path(path).stat().st_size > 48_000:
+        print("Warning: this is larger than GitHub allows for a secret (48 KB).")
+    print(f"Saved your TikTok login to {path}. It works like a password: never commit or share it.")
+    print(f"To use it on GitHub:  gh secret set TIKTOK_SESSION < {path}")
 
 
 def collect(people, seen, max_new):
@@ -380,6 +407,7 @@ def collect(people, seen, max_new):
                 pause(2, 5)
         except Stop as e:
             print("STOPPED:", e)
+            STOP_REASONS.append(str(e))
         finally:
             ctx.close()
     return found[:max_new]
@@ -435,6 +463,7 @@ def collect_videos(seen, creators, max_new, scan=VIDEO_SCAN, n_queries=None):
                 pause(2, 5)
         except Stop as e:
             print("STOPPED:", e)
+            STOP_REASONS.append(str(e))
             stopped = True
         finally:
             ctx.close()
@@ -563,7 +592,7 @@ def build(people_new, seen, today):
         p["opener"] = llm[i] if llm else opener(p["comment"])
         p["added"] = today
     people = load(OUT_DIR / "people.json", [])
-    people = people_new + people
+    people = (people_new + people)[:MAX_PEOPLE]
     save(OUT_DIR / "people.json", people)
     save(OUT_DIR / "seen.json", sorted(seen))
     (OUT_DIR / "outreach.html").write_text(render_page(people, today), encoding="utf-8")
@@ -575,7 +604,7 @@ def build_videos(new, today):
     for i, v in enumerate(new):
         v["draft"] = llm[i].strip() if llm and comment_ok(llm[i]) else template_comment(v["caption"])
         v["added"] = today
-    videos = new + load(OUT_DIR / "videos.json", [])
+    videos = (new + load(OUT_DIR / "videos.json", []))[:MAX_VIDEOS]
     save(OUT_DIR / "videos.json", videos)
     (OUT_DIR / "videos.html").write_text(render_videos_page(videos, today), encoding="utf-8")
     return videos
@@ -585,6 +614,8 @@ def pending_videos():
     """Queued videos that haven't been commented on yet, using the statuses the app saves."""
     saved = load(OUT_DIR / "ui_state.json", None) or {}
     statuses = saved.get("statuses", {})
+    if not statuses:  # statuses live in the browser unless the local app saved them: nothing to count
+        return 0
     return sum(1 for v in load(OUT_DIR / "videos.json", [])
                if statuses.get("v:" + v["url"], "To comment") == "To comment")
 
@@ -698,6 +729,9 @@ def main():
     ap.add_argument("--login", action="store_true", help="log into TikTok once")
     ap.add_argument("--selftest", action="store_true", help="check filters and page without TikTok")
     ap.add_argument("--videos", action="store_true", help="find videos to comment on and draft comments")
+    ap.add_argument("--light", action="store_true",
+                    help="with --videos: one small run, the same size as each hourly run")
+    ap.add_argument("--export-session", metavar="FILE", help="save your TikTok login to FILE for an online job")
     ap.add_argument("--every", type=int, metavar="MINUTES",
                     help="with --videos: keep running, looking for a few new videos every MINUTES")
     ap.add_argument("--hours", default=f"{ACTIVE_HOURS[0]}-{ACTIVE_HOURS[1]}",
@@ -708,6 +742,8 @@ def main():
         return selftest()
     if a.login:
         return do_login()
+    if a.export_session:
+        return export_session(a.export_session)
     today = date.today().isoformat()
     if a.every:
         if not a.videos:
@@ -718,8 +754,11 @@ def main():
             ap.error(str(e))
         return watch(a.every, hours)
     if a.videos:
-        run_videos(a.max or VIDEO_TARGET, today)
-        return
+        if a.light:
+            run_videos(a.max or LOOP_MAX, today, LOOP_SCAN, LOOP_QUERIES)
+        else:
+            run_videos(a.max or VIDEO_TARGET, today)
+        return 1 if STOP_REASONS else 0
     OUT_DIR.mkdir(exist_ok=True)
     seed_file = OUT_DIR / "seen_seed.txt"
     seed = seed_file.read_text(encoding="utf-8").split() if seed_file.exists() else []
@@ -727,10 +766,11 @@ def main():
     found = collect([], seen, a.max or TARGET_NEW)
     if not found:
         print("No new people found this run.")
-        return
+        return 1 if STOP_REASONS else 0
     people = build(found, seen, today)
     print(f"Added {len(found)} new people ({sum(p['priority'] == 'A' for p in found)} priority A). "
           f"{len(people)} total. Open: {OUT_DIR / 'outreach.html'}")
+    return 1 if STOP_REASONS else 0
 
 
 if __name__ == "__main__":

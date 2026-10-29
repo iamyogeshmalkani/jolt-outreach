@@ -16,6 +16,7 @@ export default function Workbench({ loaded }: { loaded: Loaded }) {
   const [pane, setPane] = useState<'list' | 'detail'>('list')
   const [saveStatus, setSaveStatus] = useState<SaveState>('saved')
   const [templateOpen, setTemplateOpen] = useState(false)
+  const online = loaded.mode === 'online'
 
   const statuses = STATUSES[kind]
   const viewDefs = VIEWS[kind]
@@ -139,6 +140,7 @@ export default function Workbench({ loaded }: { loaded: Loaded }) {
         </nav>
         <div className="bar-end">
           {kind === 'people' && <button className="quiet" onClick={() => setTemplateOpen(true)}>Message template</button>}
+          {online && <span className="save">Statuses are saved in this browser</span>}
           {saveStatus !== 'saved' && (
             <span className={`save save-${saveStatus}`} role="status">
               {saveStatus === 'saving' ? 'Saving' : "Couldn't save. Check the terminal."}
@@ -149,7 +151,14 @@ export default function Workbench({ loaded }: { loaded: Loaded }) {
 
       {loaded.demo && (
         <p className="banner">
-          Sample data. Run the script, then reload. Real data is read from <code>{loaded.dir}</code>.
+          {online ? (
+            <>Sample people for now. The finder runs on GitHub every hour, and real ones appear here as it finds them.</>
+          ) : (
+            <>
+              Sample data. Run <code>npm run find</code> and <code>npm run videos</code>, then reload. Real data is read from{' '}
+              <code>{loaded.dir}</code>.
+            </>
+          )}
         </p>
       )}
 
@@ -179,6 +188,7 @@ export default function Workbench({ loaded }: { loaded: Loaded }) {
         onBack={() => setPane('list')}
         registerCopy={(fn) => { copyRef.current = fn }}
         emptyView={items.length > 0}
+        online={online}
         kind={kind}
       />
 

@@ -1,0 +1,72 @@
+name: Find people and videos
+
+on:
+  schedule:
+    - cron: '17 3-16 * * *'   # videos: every hour, 8:47am to 9:47pm India time
+    - cron: '36 3 * * *'      # people: once a day, 9:06am India time
+  workflow_dispatch:
+    inputs:
+      task:
+        description: What to look for
+        type: choice
+        options: [videos, people]
+        default: videos
+
+permissions:
+  contents: write
+
+concurrency:
+  group: finder
+  cancel-in-progress: false
+
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      # The data branch holds people.json and videos.json. The page reads them from there.
+      - uses: actions/checkout@v4
+        with:
+          ref: data
+          path: data
+
+      - name: Check the TikTok login is set up
+        env:
+          SESSION: ${{ secrets.TIKTOK_SESSION }}
+        run: |
+          if [ -z "$SESSION" ]; then
+            echo "::error::No TikTok login yet. On your computer run: npm run login, then npm run export-session, then: gh secret set TIKTOK_SESSION < jolt-session.json"
+            exit 1
+          fi
+          printf '%s' "$SESSION" > "$RUNNER_TEMP/session.json"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install playwright && sudo apt-get install -y xvfb
+
+      - name: Look on TikTok
+        env:
+          JOLT_OUT_DIR: ${{ github.workspace }}/data
+          JOLT_SESSION: ${{ runner.temp }}/session.json
+          TASK: ${{ github.event.inputs.task || (github.event.schedule == '36 3 * * *' && 'people' || 'videos') }}
+        run: |
+          if [ "$TASK" = "people" ]; then
+            xvfb-run -a python jolt_outreach.py
+          else
+            xvfb-run -a python jolt_outreach.py --videos --light
+          fi
+
+      - name: Save what was found
+        if: always()
+        working-directory: data
+        run: |
+          git config user.name "jolt-outreach-bot"
+          git config user.email "jolt-outreach-bot@users.noreply.github.com"
+          git add people.json videos.json seen.json seen_videos.json 2>/dev/null || true
+          git diff --cached --quiet && exit 0
+          git commit -m "Update $(date -u +%Y-%m-%dT%H:%MZ)"
+          git pull --rebase origin data
+          git push origin HEAD:data
