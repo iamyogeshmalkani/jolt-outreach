@@ -10,6 +10,17 @@ export default function App() {
     load().then(setLoaded, (e: Error) => setError(e.message))
   }, [])
 
+  // Pick up new people and videos the finder has added, without losing your place or your edits.
+  useEffect(() => {
+    const t = setInterval(() => {
+      load().then(
+        (next) => setLoaded((prev) => (prev ? { ...prev, people: next.people, videos: next.videos, demo: next.demo } : prev)),
+        () => {},
+      )
+    }, 60_000)
+    return () => clearInterval(t)
+  }, [])
+
   if (error) {
     return (
       <main className="splash">

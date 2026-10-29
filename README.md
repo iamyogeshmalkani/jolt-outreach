@@ -41,6 +41,26 @@ On Windows, use `py` if `python` isn't recognised.
 
 The first run takes 5 to 10 minutes. Leave the browser window alone while it works.
 
+## Keep looking for videos every hour
+
+    cd finder
+    python jolt_outreach.py --videos --every 60
+
+This keeps running in that terminal. Each hour it searches twice and queues up to 2 new videos, only
+between 8am and 10pm (change with `--hours 9-20`). A few minutes of random timing are added to each
+wait. The app picks up new videos about once a minute, so you don't need to reload.
+
+- It pauses by itself while 30 or more videos are still waiting for a comment, so the list can't grow
+  faster than you can work through it.
+- It stops, and says why, if TikTok asks you to log in or solve a check. Fix that in the window, then
+  start it again.
+- A Chrome window opens briefly each hour. The computer must be on and awake. To start it
+  automatically, run the command above from Task Scheduler (Windows, at log on) or a login item (Mac).
+- If one run fails, for example because the browser was already open, it tries again next hour.
+
+Running a logged-in account on a schedule looks more automated than a daily run, so the risk to that
+account is higher. See "Please read" below.
+
 Both parts share one folder, `~/jolt_outreach` (your home folder). Set `JOLT_OUT_DIR` to use another.
 It holds `people.json`, `videos.json`, your statuses (`ui_state.json`) and the browser profile with
 your TikTok login. **Don't commit or share that folder.** It contains your login and the handles

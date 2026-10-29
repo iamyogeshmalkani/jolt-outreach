@@ -13,6 +13,7 @@ Setup (once)
 Each day
     python jolt_outreach.py              # finds ~20 new people, rebuilds outreach.html
     python jolt_outreach.py --videos     # finds ~8 videos worth a comment, rebuilds videos.html
+    python jolt_outreach.py --videos --every 60   # keeps looking, a few videos every hour (8am-10pm)
 
 Optional: better opening lines for about a cent a run
     pip install anthropic
@@ -43,7 +44,7 @@ import random
 import re
 import sys
 import time
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 # ----------------------------- settings you can edit -----------------------------
@@ -54,9 +55,15 @@ BODY = ("I'm {NAME} from Jolt. We help people get control of their screen time, 
         "Up for a 20-min chat? As a thanks, you'd get {OFFER}.")
 TARGET_NEW = 20          # stop once this many new people are found
 MAX_VIDEOS = 8           # videos opened per run
-QUERIES_PER_RUN = 4      # searches per run, rotated daily
+QUERIES_PER_RUN = 4      # searches per run, rotated every hour
 VIDEO_TARGET = 8         # videos to queue for commenting per run
 VIDEO_SCAN = 15          # videos opened per run to find them
+# Hourly mode (--every): small runs so the day's total stays modest and looks ordinary.
+LOOP_MAX = 2             # videos queued per run
+LOOP_QUERIES = 2         # searches per run
+LOOP_SCAN = 6            # videos opened per run
+BACKLOG_CAP = 30         # pause finding more while this many videos still wait to be commented on
+ACTIVE_HOURS = (8, 22)   # hourly mode only runs from the first hour up to (not including) the last
 MIN_COMMENTS = 2         # skip videos with fewer comments than this
 OUT_DIR = Path(os.environ.get("JOLT_OUT_DIR") or Path.home() / "jolt_outreach")
 VIDEO_QUERIES = [
@@ -378,12 +385,12 @@ def collect(people, seen, max_new):
     return found[:max_new]
 
 
-def collect_videos(seen, creators, max_new):
+def collect_videos(seen, creators, max_new, scan=VIDEO_SCAN, n_queries=None):
     """Find videos on our topic with active comment sections. Read-only: opens pages, no clicks."""
     from playwright.sync_api import sync_playwright
-    queries = pick_queries(VIDEO_QUERIES)
-    print("Searches today:", ", ".join(queries))
-    found = []
+    queries = pick_queries(VIDEO_QUERIES, n_queries)
+    print("Searches this run:", ", ".join(queries))
+    found, stopped = [], False
     with sync_playwright() as pw:
         ctx = launch(pw)
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
@@ -397,7 +404,7 @@ def collect_videos(seen, creators, max_new):
                 cands += [(q, u) for u in links[:8]]
                 pause()
             random.shuffle(cands)
-            for q, url in cands[:VIDEO_SCAN]:
+            for q, url in cands[:scan]:
                 if len(found) >= max_new:
                     break
                 creator = (re.search(r"/@([^/]+)/video", url) or [None, ""])[1]
@@ -428,15 +435,16 @@ def collect_videos(seen, creators, max_new):
                 pause(2, 5)
         except Stop as e:
             print("STOPPED:", e)
+            stopped = True
         finally:
             ctx.close()
-    return found
+    return found, stopped
 
 
-def pick_queries(pool=None):
+def pick_queries(pool=None, n=None):
     qs = list(pool or QUERIES)
-    random.Random(int(time.time() // 86400)).shuffle(qs)
-    return qs[:QUERIES_PER_RUN]
+    random.Random(int(time.time() // 3600)).shuffle(qs)
+    return qs[:n or QUERIES_PER_RUN]
 
 
 # ------------------------------------ output ------------------------------------
@@ -573,18 +581,57 @@ def build_videos(new, today):
     return videos
 
 
-def run_videos(max_new, today):
+def pending_videos():
+    """Queued videos that haven't been commented on yet, using the statuses the app saves."""
+    saved = load(OUT_DIR / "ui_state.json", None) or {}
+    statuses = saved.get("statuses", {})
+    return sum(1 for v in load(OUT_DIR / "videos.json", [])
+               if statuses.get("v:" + v["url"], "To comment") == "To comment")
+
+
+def run_videos(max_new, today, scan=VIDEO_SCAN, n_queries=None):
+    """One search pass. Returns True if TikTok asked for a login or verification."""
     OUT_DIR.mkdir(exist_ok=True)
+    waiting = pending_videos()
+    if waiting >= BACKLOG_CAP:
+        print(f"{waiting} videos are still waiting for a comment. Skipping this run.")
+        return False
     seen = set(load(OUT_DIR / "seen_videos.json", []))
     creators = {v["creator"].lower() for v in load(OUT_DIR / "videos.json", [])}
-    found = collect_videos(seen, creators, max_new)
+    found, stopped = collect_videos(seen, creators, max_new, scan, n_queries)
     save(OUT_DIR / "seen_videos.json", sorted(seen))
     if not found:
         print("No new videos found this run.")
-        return
+        return stopped
     videos = build_videos(found, today)
     print(f"Queued {len(found)} videos to comment on. {len(videos)} total. "
           f"Open: {OUT_DIR / 'videos.html'}")
+    return stopped
+
+
+def parse_hours(text):
+    m = re.fullmatch(r"(\d{1,2})-(\d{1,2})", text.strip())
+    if not m or not 0 <= int(m[1]) < int(m[2]) <= 24:
+        raise ValueError(f"--hours should look like 8-22, got {text!r}")
+    return int(m[1]), int(m[2])
+
+
+def watch(every_minutes, hours):
+    """Keep looking for videos. Stops by itself if TikTok asks for a login or verification."""
+    start, end = hours
+    print(f"Looking for videos every {every_minutes} minutes between {start}:00 and {end}:00. "
+          "Press Ctrl+C to stop.")
+    while True:
+        if start <= datetime.now().hour < end:
+            print(datetime.now().strftime("\n[%H:%M]"))
+            try:
+                if run_videos(LOOP_MAX, date.today().isoformat(), LOOP_SCAN, LOOP_QUERIES):
+                    print("Stopped. Fix the login or verification in TikTok, then start again.")
+                    return
+            except Exception as e:  # noqa: BLE001
+                print("This run failed, trying again next time:", e)
+        wait = max(60, every_minutes * 60 + random.uniform(-300, 300))  # a few minutes of jitter
+        time.sleep(wait)
 
 
 def selftest():
@@ -632,12 +679,29 @@ def selftest():
     (OUT_DIR / "selftest_videos.html").write_text(render_videos_page(vp, "2026-10-29"), encoding="utf-8")
     print("video selftest ok ->", OUT_DIR / "selftest_videos.html")
 
+    assert parse_hours("8-22") == (8, 22) and parse_hours(" 0-24 ") == (0, 24)
+    for bad in ("22-8", "8", "a-b", "8-25"):
+        try:
+            parse_hours(bad)
+        except ValueError:
+            continue
+        raise AssertionError(bad)
+    assert len(pick_queries(VIDEO_QUERIES, 2)) == 2 and len(pick_queries(VIDEO_QUERIES)) == QUERIES_PER_RUN
+    save(OUT_DIR / "videos.json", [{"url": "u1"}, {"url": "u2"}, {"url": "u3"}])
+    save(OUT_DIR / "ui_state.json", {"statuses": {"v:u1": "Posted", "v:u2": "Skip"}})
+    assert pending_videos() == 1, pending_videos()
+    print("hourly selftest ok")
+
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--login", action="store_true", help="log into TikTok once")
     ap.add_argument("--selftest", action="store_true", help="check filters and page without TikTok")
     ap.add_argument("--videos", action="store_true", help="find videos to comment on and draft comments")
+    ap.add_argument("--every", type=int, metavar="MINUTES",
+                    help="with --videos: keep running, looking for a few new videos every MINUTES")
+    ap.add_argument("--hours", default=f"{ACTIVE_HOURS[0]}-{ACTIVE_HOURS[1]}",
+                    help="with --every: only run between these hours, e.g. 8-22 (default)")
     ap.add_argument("--max", type=int, help=f"new people (default {TARGET_NEW}) or videos (default {VIDEO_TARGET}) to find")
     a = ap.parse_args()
     if a.selftest:
@@ -645,8 +709,17 @@ def main():
     if a.login:
         return do_login()
     today = date.today().isoformat()
+    if a.every:
+        if not a.videos:
+            ap.error("--every needs --videos")
+        try:
+            hours = parse_hours(a.hours)
+        except ValueError as e:
+            ap.error(str(e))
+        return watch(a.every, hours)
     if a.videos:
-        return run_videos(a.max or VIDEO_TARGET, today)
+        run_videos(a.max or VIDEO_TARGET, today)
+        return
     OUT_DIR.mkdir(exist_ok=True)
     seed_file = OUT_DIR / "seen_seed.txt"
     seed = seed_file.read_text(encoding="utf-8").split() if seed_file.exists() else []
