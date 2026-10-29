@@ -29,7 +29,7 @@ test('builds the right addresses and reads posts, comments and rules', async () 
     assert.equal((await api.rules('nosurf')).rules[0].short_name, 'No self-promotion')
     assert.deepEqual(seen, [
       '/r/nosurf/top.json?t=week&limit=25&raw_json=1',
-      '/comments/p1.json?sort=top&limit=40&depth=1&raw_json=1',
+      '/comments/p1.json?sort=top&limit=100&depth=1&raw_json=1',
       '/r/nosurf/about/rules.json?raw_json=1',
     ])
   } finally { server.close() }

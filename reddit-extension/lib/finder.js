@@ -1,6 +1,6 @@
-// One run: for each subreddit, the top posts and who commented on them best. `api` is lib/reddit.js's reddit(); `pause` waits a moment.
+// One run: for each subreddit, the top posts, the top commenter on each, and people who give suggestions or reviews. `api` is lib/reddit.js's reddit(); `pause` waits a moment.
 import { RedditError } from './reddit.js'
-import { makeItem, parseSubs, parseUsers, pickTopCommenter, postProblem, ruleFlags } from './rules.js'
+import { makeItem, parseSubs, parseUsers, pickPeople, postProblem, ruleFlags } from './rules.js'
 
 export async function find(api, s, known, log = async () => {}, pause = async () => {}) {
   const subs = parseSubs(s.subs)
@@ -40,9 +40,9 @@ export async function find(api, s, known, log = async () => {}, pause = async ()
         }
         await pause()
         const children = await api.comments(post.id)
-        const top = pickTopCommenter(children, { postAuthor: post.author, skipUsers })
-        if (top) skipUsers.add(top.author.toLowerCase()) // one message per person per run
-        items.push(makeItem(post, top, flags))
+        const picked = pickPeople(children, { postAuthor: post.author, skipUsers, wantSuggesters: s.suggesters })
+        if (picked.top) skipUsers.add(picked.top.author.toLowerCase()) // one message per person per run
+        items.push(makeItem(post, picked, flags))
         kept++
       }
       const why = Object.entries(skipped).map(([k, n]) => `${n} ${k}`).join(', ')

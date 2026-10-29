@@ -4,6 +4,7 @@ export const DEFAULTS = {
   postsPerSub: 3,      // how many posts to keep from each subreddit
   minComments: 5,      // skip posts with fewer comments than this
   minScore: 5,         // skip posts with fewer upvotes than this
+  suggesters: 2,       // besides the top commenter, message up to this many people per post who give a suggestion or review (0 turns it off)
   skip: '',            // Reddit usernames you have already contacted, separated by spaces or new lines
   provider: 'groq',    // optional AI: 'groq' or 'xai' (Grok) writes the reply and the first line of each message
   aiKey: '',           // without a key you get a plain opening line and no reply draft

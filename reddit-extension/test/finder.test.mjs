@@ -28,7 +28,7 @@ test('keeps the first few good posts of a subreddit and finds each one\'s top co
   const logs = []
   const { items, stopped } = await find(api, settings(), known(), async (l) => logs.push(l))
   assert.equal(stopped, '')
-  assert.deepEqual(items.map((i) => [i.id, i.top.author]), [['b', 'alice'], ['d', 'bob']])
+  assert.deepEqual(items.map((i) => [i.id, i.people[0].author]), [['b', 'alice'], ['d', 'bob']])
   assert.ok(!api.calls.some(([k, id]) => k === 'comments' && ['a', 'c', 'e'].includes(id)), 'skipped and surplus posts are never opened')
   assert.ok(logs.some((l) => /r\/nosurf: 2 posts kept \(skipped 1 pinned, 1 adult\)/.test(l)), logs.join('|'))
 })
@@ -43,7 +43,7 @@ test('never picks the same person twice in a run, or someone already contacted',
     },
   })
   const { items } = await find(api, settings({ postsPerSub: 3, skip: 'Already_Done' }), known(), async () => {})
-  assert.deepEqual(items.map((i) => i.top.author), ['alice', 'bob', 'dave'])
+  assert.deepEqual(items.map((i) => i.people[0].author), ['alice', 'bob', 'dave'])
 })
 
 test('skips posts and people from earlier runs', async () => {
@@ -51,7 +51,7 @@ test('skips posts and people from earlier runs', async () => {
   const k = { posts: new Set(['a']), authors: new Set(['bob']) }
   const { items } = await find(api, settings(), k, async () => {})
   assert.deepEqual(items.map((i) => i.id), ['b'])
-  assert.equal(items[0].top, null, 'bob was already contacted and nobody else qualifies, so the post is kept for a reply only')
+  assert.deepEqual(items[0].people, [], 'bob was already contacted and nobody else qualifies, so the post is kept for a reply only')
 })
 
 test('flags subreddits whose rules mention promotion', async () => {
@@ -96,4 +96,32 @@ test('a failing rules lookup does not matter, but a block on it does', async () 
 test('other errors are not swallowed', async () => {
   const api = fakeApi({ top: { nosurf: new TypeError('boom') } })
   await assert.rejects(find(api, settings(), known(), async () => {}), /boom/)
+})
+
+test('also collects people who give suggestions, when asked to', async () => {
+  const api = fakeApi({
+    top: { nosurf: [p('a')] },
+    comments: {
+      a: [
+        comment({ author: 'top_voice', body: 'This is exactly how I feel about my phone every single evening lately.', score: 500 }),
+        comment({ author: 'asker', body: 'Does anyone know how to stop scrolling at night? I really cannot stop and it is getting worse.', score: 300 }),
+        comment({ author: 'helper', body: 'I recommend Opal. It blocks the apps I choose until my work is done, and that worked for me for months.', score: 20 }),
+      ],
+    },
+  })
+  const on = await find(api, settings({ suggesters: 2 }), known(), async () => {})
+  assert.deepEqual(on.items[0].people.map((x) => [x.author, x.why, Boolean(x.tentative)]), [['top_voice', 'top', false], ['helper', 'suggestion', true]])
+  const off = await find(api, settings({ suggesters: 0 }), known(), async () => {})
+  assert.deepEqual(off.items[0].people.map((x) => x.author), ['top_voice'])
+})
+
+test('a suggestion-giver already contacted is not offered again', async () => {
+  const api = fakeApi({
+    top: { nosurf: [p('a')] },
+    comments: { a: [...topComment('first'), comment({ author: 'helper', body: 'I recommend Opal. It blocks the apps I choose until my work is done, and that worked for me.' })] },
+  })
+  const k = known()
+  k.authors.add('helper')
+  const { items } = await find(api, settings({ suggesters: 2 }), k, async () => {})
+  assert.deepEqual(items[0].people.map((x) => x.author), ['first'])
 })

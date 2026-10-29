@@ -1,14 +1,15 @@
+import { pending, upgradeItem } from './lib/rules.js'
 import { DEFAULTS, fill, normalize } from './lib/settings.js'
 import { syncFromSettings } from './lib/sync.js'
 
 const STATUSES = ['To send', 'Sent', 'Replied', 'Booked', 'Skip']
-// A post stays in "To do" until both the message and the reply have been dealt with. A post with no suitable commenter only needs the reply.
-const pending = (it) => (it.top && it.dmStatus === 'To send') || it.commentStatus === 'To post'
+// A post stays in "To do" until every message and the reply have been dealt with. After that it sits under the furthest any person got.
+const anyone = (it, ...statuses) => it.people.some((p) => statuses.includes(p.dmStatus))
 const VIEWS = [
   { label: 'To do', has: pending },
-  { label: 'Sent', has: (it) => !pending(it) && it.dmStatus === 'Sent' },
-  { label: 'Replied', has: (it) => !pending(it) && (it.dmStatus === 'Replied' || it.dmStatus === 'Booked') },
-  { label: 'Done', has: (it) => !pending(it) && !['Sent', 'Replied', 'Booked'].includes(it.dmStatus) },
+  { label: 'Sent', has: (it) => !pending(it) && anyone(it, 'Sent') },
+  { label: 'Replied', has: (it) => !pending(it) && !anyone(it, 'Sent') && anyone(it, 'Replied', 'Booked') },
+  { label: 'Done', has: (it) => !pending(it) && !anyone(it, 'Sent', 'Replied', 'Booked') },
 ]
 const NEXT = ['Mark as sent', 'They replied', 'Interview booked']
 const PREV = ['Unmark as sent', 'Unmark replied', 'Unmark booked']
@@ -19,40 +20,43 @@ let mute = 0 // ignore the storage change caused by our own save, so typing is n
 const $ = (id) => document.getElementById(id)
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
 
-const dmText = (it) => it.dmEdit ?? `${it.opener} ${fill(state.settings.body, state.settings)}`
+const key = (p) => p.author.toLowerCase()
+const dmText = (p) => p.dmEdit ?? `${p.opener} ${fill(state.settings.body, state.settings)}`
 const commentText = (it) => it.commentEdit ?? it.comment
 const subject = (it) => fill(state.settings.subject, state.settings, { sub: it.sub })
-function dmUrl(it) {
-  const base = `https://www.reddit.com/message/compose/?to=${encodeURIComponent(it.top.author)}&subject=${encodeURIComponent(subject(it))}`
-  const withText = `${base}&message=${encodeURIComponent(dmText(it))}`
+function dmUrl(it, p) {
+  const base = `https://www.reddit.com/message/compose/?to=${encodeURIComponent(p.author)}&subject=${encodeURIComponent(subject(it))}`
+  const withText = `${base}&message=${encodeURIComponent(dmText(p))}`
   return withText.length < 1900 ? withText : base // a very long link may not open, so fall back to copying the text
 }
 
 async function load() {
   const r = await chrome.storage.local.get(['items', 'settings', 'status'])
-  state.items = r.items || []
+  state.items = (r.items || []).map(upgradeItem)
   state.settings = normalize(r.settings)
   state.status = r.status || {}
   render()
 }
 
-// The message part and the reply part of a post are stamped separately, so two devices changing different parts of one post both keep their change.
-const DM_FIELDS = ['dmStatus', 'dmEdit']
+// The reply to a post, and the message to each person, are stamped separately, so two devices changing different ones both keep their change.
 const COMMENT_FIELDS = ['commentStatus', 'commentEdit']
 
-async function patch(id, fields) {
+async function save(id, change) {
   const { items = [] } = await chrome.storage.local.get('items')
   const at = items.findIndex((x) => x.id === id)
   if (at < 0) return
-  const now = Date.now()
-  if (DM_FIELDS.some((k) => k in fields)) fields = { ...fields, dmAt: now }
-  if (COMMENT_FIELDS.some((k) => k in fields)) fields = { ...fields, commentAt: now }
-  items[at] = { ...items[at], ...fields }
+  items[at] = change(upgradeItem(items[at]))
   mute = Date.now() + 500
   await chrome.storage.local.set({ items })
-  state.items = items
+  state.items = items.map(upgradeItem)
   scheduleSync()
 }
+
+const patch = (id, fields) =>
+  save(id, (it) => ({ ...it, ...fields, ...(COMMENT_FIELDS.some((k) => k in fields) ? { commentAt: Date.now() } : {}) }))
+
+const patchPerson = (id, who, fields) =>
+  save(id, (it) => ({ ...it, people: it.people.map((p) => (key(p) === who ? { ...p, ...fields, dmAt: Date.now() } : p)) }))
 
 // ---- keeping other devices in step ----
 let syncTimer = 0
@@ -96,7 +100,7 @@ function render() {
   if (!list.some((i) => i.id === state.selected)) state.selected = list[0]?.id ?? null
   $('rows').innerHTML = list.length
     ? list.map((i) => `<li><button class="row" data-id="${esc(i.id)}"${i.id === state.selected ? ' aria-current="true"' : ''}>
-        <span class="row-head"><span class="handle">r/${esc(i.sub)}</span><span class="state">${i.top ? 'u/' + esc(i.top.author) : 'no commenter'}</span></span>
+        <span class="row-head"><span class="handle">r/${esc(i.sub)}</span><span class="state">${i.people.length ? 'u/' + esc(i.people[0].author) + (i.people.length > 1 ? ` +${i.people.length - 1}` : '') : 'no commenter'}</span></span>
         <span class="row-text">${esc(i.title)}</span></button></li>`).join('')
     : `<li class="rows-empty">${state.items.length ? 'No one here.' : 'Nothing yet.'}</li>`
 
@@ -115,28 +119,32 @@ function renderDetail(it) {
       : `<h2>No posts yet</h2><p class="hint">Add your subreddits in Settings, then choose <b>Find top posts</b>.</p>${state.status.error ? `<p class="error">${esc(state.status.error)}</p>` : ''}`
     return
   }
-  const idx = STATUSES.indexOf(it.dmStatus)
-  const next = idx <= 2 ? { label: NEXT[idx], to: STATUSES[idx + 1] } : null
-  const prev = idx >= 1 && idx <= 3 ? { label: PREV[idx - 1], to: STATUSES[idx - 1] } : null
   const flags = it.flags?.length
     ? `<p class="warn">r/${esc(it.sub)}'s rules mention: ${it.flags.map(esc).join(', ')}. Read them, and ask the moderators, before you message or reply.</p>`
     : ''
-  const dm = it.top
-    ? `<section>
-        <h3>Message the top commenter <span class="pill">${esc(it.dmStatus)}</span></h3>
-        <p class="meta"><a href="https://www.reddit.com/user/${encodeURIComponent(it.top.author)}/" target="_blank" rel="noopener">u/${esc(it.top.author)}</a>, ${it.top.score} upvotes${it.top.url ? `, <a href="${esc(it.top.url)}" target="_blank" rel="noopener">their comment</a>` : ''}</p>
-        <blockquote>${esc(it.top.body)}</blockquote>
-        <textarea data-edit="dm" rows="6" aria-label="Your message">${esc(dmText(it))}</textarea>
+  const personSection = (p) => {
+    const idx = STATUSES.indexOf(p.dmStatus)
+    const next = idx <= 2 ? { label: NEXT[idx], to: STATUSES[idx + 1] } : null
+    const prev = idx >= 1 && idx <= 3 ? { label: PREV[idx - 1], to: STATUSES[idx - 1] } : null
+    const who = esc(key(p))
+    return `<section>
+        <h3>${p.why === 'suggestion' ? 'Message someone who gave a suggestion' : 'Message the top commenter'} <span class="pill">${esc(p.dmStatus)}</span></h3>
+        <p class="meta"><a href="https://www.reddit.com/user/${encodeURIComponent(p.author)}/" target="_blank" rel="noopener">u/${esc(p.author)}</a>, ${p.score} upvotes${p.url ? `, <a href="${esc(p.url)}" target="_blank" rel="noopener">their comment</a>` : ''}</p>
+        <blockquote>${esc(p.body)}</blockquote>
+        <textarea data-edit="dm" data-p="${who}" rows="6" aria-label="Your message to u/${esc(p.author)}">${esc(dmText(p))}</textarea>
         <div class="actions">
-          ${idx === 4 ? '<button class="primary" data-set="To send">Put back in the queue</button>' : `
-            <a class="button ${idx === 0 ? 'primary' : 'secondary'}" href="${esc(dmUrl(it))}" target="_blank" rel="noopener">Open message on Reddit</a>
-            <button class="secondary" data-copy="dm">Copy message</button>
-            ${next ? `<button class="${idx === 0 ? 'secondary' : 'primary'}" data-set="${next.to}">${next.label}</button>` : '<span class="done">Interview booked.</span>'}
-            ${prev ? `<button class="quiet" data-set="${prev.to}">${prev.label}</button>` : ''}
-            ${idx === 0 ? '<button class="quiet" data-set="Skip">Skip</button>' : ''}`}
-          ${it.dmEdit !== undefined ? '<button class="quiet" data-restore="dm">Restore original</button>' : ''}
+          ${idx === 4 ? `<button class="primary" data-p="${who}" data-set="To send">Put back in the queue</button>` : `
+            <a class="button ${idx === 0 ? 'primary' : 'secondary'}" href="${esc(dmUrl(it, p))}" target="_blank" rel="noopener">Open message on Reddit</a>
+            <button class="secondary" data-p="${who}" data-copy="dm">Copy message</button>
+            ${next ? `<button class="${idx === 0 ? 'secondary' : 'primary'}" data-p="${who}" data-set="${next.to}">${next.label}</button>` : '<span class="done">Interview booked.</span>'}
+            ${prev ? `<button class="quiet" data-p="${who}" data-set="${prev.to}">${prev.label}</button>` : ''}
+            ${idx === 0 ? `<button class="quiet" data-p="${who}" data-set="Skip">Skip</button>` : ''}`}
+          ${p.dmEdit !== undefined ? `<button class="quiet" data-p="${who}" data-restore="dm">Restore original</button>` : ''}
         </div>
       </section>`
+  }
+  const dm = it.people.length
+    ? it.people.map(personSection).join('')
     : `<section><h3>Message the top commenter</h3><p class="hint">No suitable commenter on this post. You can still reply to it below.</p></section>`
   const text = commentText(it)
   const reply = `<section>
@@ -163,10 +171,10 @@ function renderDetail(it) {
 }
 
 // Change an item. If that moves it out of the current view, move on to its neighbour so you keep your place.
-async function act(it, fields) {
+async function act(it, change) {
   const list = visible()
   const at = list.findIndex((i) => i.id === it.id)
-  await patch(it.id, fields)
+  await change()
   if (viewOf(state.items.find((i) => i.id === it.id)) !== state.view) state.selected = (list[at + 1] ?? list[at - 1])?.id ?? null
   render()
 }
@@ -178,16 +186,17 @@ document.addEventListener('click', async (e) => {
   if (t.dataset.view) { state.view = Number(t.dataset.view); render() }
   else if (t.dataset.id) { state.selected = t.dataset.id; render() }
   else if (t === $('find')) chrome.runtime.sendMessage({ type: 'run' })
-  else if (it && t.dataset.set) await act(it, { dmStatus: t.dataset.set })
-  else if (it && t.dataset.comment) await act(it, { commentStatus: t.dataset.comment })
+  else if (it && t.dataset.set) await act(it, () => patchPerson(it.id, t.dataset.p, { dmStatus: t.dataset.set }))
+  else if (it && t.dataset.comment) await act(it, () => patch(it.id, { commentStatus: t.dataset.comment }))
   else if (it && t.dataset.copy) {
-    const text = t.dataset.copy === 'dm' ? dmText(it) : commentText(it)
-    try { await navigator.clipboard.writeText(text) } catch { document.querySelector(`[data-edit="${t.dataset.copy}"]`)?.select(); document.execCommand('copy') }
+    const p = it.people.find((x) => key(x) === t.dataset.p)
+    const text = t.dataset.copy === 'dm' ? dmText(p) : commentText(it)
+    try { await navigator.clipboard.writeText(text) } catch { t.closest('section')?.querySelector('textarea')?.select(); document.execCommand('copy') }
     const label = t.textContent
     t.textContent = 'Copied'
     setTimeout(() => (t.textContent = label), 1500)
   } else if (it && t.dataset.restore) {
-    await patch(it.id, t.dataset.restore === 'dm' ? { dmEdit: undefined } : { commentEdit: undefined })
+    await (t.dataset.restore === 'dm' ? patchPerson(it.id, t.dataset.p, { dmEdit: undefined }) : patch(it.id, { commentEdit: undefined }))
     render()
   }
 })
@@ -195,7 +204,7 @@ document.addEventListener('click', async (e) => {
 document.addEventListener('input', (e) => {
   const kind = e.target.dataset?.edit
   const it = state.items.find((i) => i.id === state.selected)
-  if (kind && it) patch(it.id, kind === 'dm' ? { dmEdit: e.target.value } : { commentEdit: e.target.value })
+  if (kind && it) kind === 'dm' ? patchPerson(it.id, e.target.dataset.p, { dmEdit: e.target.value }) : patch(it.id, { commentEdit: e.target.value })
 })
 $('sync').onclick = doSync
 window.addEventListener('focus', () => { if (Date.now() - lastSync > 30_000) doSync() })

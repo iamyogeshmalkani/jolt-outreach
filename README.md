@@ -105,6 +105,12 @@ dashboard, when you come back to the dashboard tab, and with **Sync now**.
   message template do sync, and the most recently saved version wins.
 - **It keeps the newest 250 posts.** Older ones drop off, on every device.
 
+- **People who give suggestions or reviews.** Besides the top commenter, it looks for other commenters who
+  recommend something, give a tip or say what worked for them (default 2 per post, 0 turns it off in
+  Settings). It finds them by the way they write ("I recommend", "what worked for me", "you should try"),
+  and if an AI key is set, the AI confirms each one, so questions, jokes and venting are dropped. Each person
+  gets their own message, edit box and status. A post stays in **To do** until every person on it and the
+  reply are dealt with.
 - **The top commenter** is the highest-scoring top-level comment from a real person. It skips the poster,
   moderators, bots, deleted comments, links, anyone who looks under 18, and sensitive topics. Posts that
   are pinned, adult, locked or about sensitive subjects are skipped too.

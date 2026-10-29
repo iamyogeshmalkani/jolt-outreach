@@ -41,7 +41,9 @@ TOP = {
 }
 COMMENTS = {
     "g1": [c("AutoModerator", "Please read the rules before you post in this community, thanks."), c("op_user", "Thank you all so much for the replies and the advice."),
-           c("alice", "Grayscale plus a charger outside the bedroom changed my evenings completely.", 120)],
+           c("alice", "Grayscale plus a charger outside the bedroom changed my evenings completely.", 120),
+           c("asker", "Does anyone know how to stop scrolling at night? I really cannot stop and it is getting worse.", 70),
+           c("helper", "I recommend Opal. It blocks the apps I choose until my work is done, and that worked for me for months.", 20)],
     "g2": [c("bob", "Logging out of everything every night adds just enough friction to matter.", 80)],
     "d1": [c("carol", "I deleted the feed apps and kept only messaging, and it helped a lot.", 60)],
 }
@@ -99,8 +101,11 @@ class Fake(BaseHTTPRequestHandler):
         user = next(m["content"] for m in body["messages"] if m["role"] == "user")
         if system.startswith("Reply with the single word OK"):  # the settings page's tiny check
             return self._send(200, {"choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": "OK"}}]})
-        n = len(json.loads(user))
-        text = json.dumps([GOOD_REPLY if "write replies to Reddit posts" in system else f"Your point about quitting scrolling really landed ({i})." for i in range(n)])
+        asked = json.loads(user)
+        if "screen Reddit comments" in system:  # confirm who really gives a suggestion
+            text = json.dumps(["recommend" in x["comment"] for x in asked])
+        else:
+            text = json.dumps([GOOD_REPLY if "write replies to Reddit posts" in system else f"Your point about quitting scrolling really landed ({i})." for i in range(len(asked))])
         self._send(200, {"choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": text, "reasoning": "..."}}]})
 
 
@@ -183,13 +188,15 @@ def main():
         items = sw.evaluate("chrome.storage.local.get('items').then(r => r.items)")
         by_id = {i["id"]: i for i in items}
         assert sorted(by_id) == ["d1", "g1", "g2"], (sorted(by_id), sw.evaluate("chrome.storage.local.get(['status','log','settings'])"))  # pinned, adult and private-subreddit posts are skipped
-        assert by_id["g1"]["top"]["author"] == "alice" and by_id["g2"]["top"]["author"] == "bob" and by_id["d1"]["top"]["author"] == "carol"
+        people = {k: [(p["author"], p["why"]) for p in v["people"]] for k, v in by_id.items()}
+        assert people == {"g1": [("alice", "top"), ("helper", "suggestion")], "g2": [("bob", "top")], "d1": [("carol", "top")]}, people
+        assert all("tentative" not in p and "verdict" not in p for i in items for p in i["people"])
         assert by_id["g1"]["flags"] == ["No self-promotion"] and by_id["d1"]["flags"] == []
         assert all(i["comment"] == GOOD_REPLY for i in items)
-        assert all(i["opener"].startswith("Your point about quitting scrolling") for i in items), [i["opener"] for i in items]
+        assert all(p["opener"].startswith("Your point about quitting scrolling") for i in items for p in i["people"]), [p["opener"] for i in items for p in i["people"]]
         log = sw.evaluate("chrome.storage.local.get('log').then(r => r.log.join('\\n'))")
-        assert "r/privatesub: private or restricted, skipped" in log and "Groq wrote 3 replies and 3 opening lines" in log, log
-        print("run ok:", sorted(by_id), "| top commenters:", [by_id[k]["top"]["author"] for k in ("g1", "g2", "d1")])
+        assert "r/privatesub: private or restricted, skipped" in log and "Groq wrote 3 replies and 4 opening lines" in log and "Groq checked the suggestions: 1 kept, 0 dropped" in log, log
+        print("run ok:", sorted(by_id), "| people:", people)
 
         # 4. the dashboard
         dash = ctx.new_page()
@@ -198,9 +205,11 @@ def main():
         assert dash.locator(".row").count() == 3
         dash.locator(".row", has_text="Post g1").click()
         assert "No self-promotion" in dash.inner_text(".warn"), "the rules warning shows"
-        dm = dash.input_value('[data-edit="dm"]')
+        assert dash.locator('[data-edit="dm"]').count() == 2, "one message box for the top commenter and one for the suggestion-giver"
+        assert "gave a suggestion" in dash.inner_text("main") and "top commenter" in dash.inner_text("main")
+        dm = dash.input_value('[data-edit="dm"][data-p="alice"]')
         assert dm.startswith("Your point about quitting scrolling") and "I'm Isha from Jolt" in dm and "a year of Jolt Premium" in dm, dm
-        href = dash.get_attribute("a.button.primary", "href")
+        href = dash.locator("section", has_text="u/alice").locator("a.button.primary").get_attribute("href")
         assert href.startswith("https://www.reddit.com/message/compose/?to=alice&subject=") and "message=" in href, href
         assert "r%2Fnosurf" in href
         assert dash.input_value('[data-edit="comment"]') == GOOD_REPLY
@@ -208,26 +217,32 @@ def main():
         dash.screenshot(path="/tmp/reddit_dash.png")
         print("dashboard detail ok. message link:", href[:90] + "…")
 
-        # 5. working through it: edit, mark the reply posted (the post stays in To do), mark the message sent (now it moves on)
-        dash.fill('[data-edit="dm"]', "My own edited message to Alice.")
+        # 5. working through it. A post stays in To do until EVERY person on it and the reply are dealt with.
+        dash.fill('[data-edit="dm"][data-p="alice"]', "My own edited message to Alice.")
         time.sleep(0.8)
         dash.click("text=Mark as posted")
+        dash.click('button[data-p="alice"][data-set="Sent"]')
         time.sleep(0.4)
-        assert dash.locator(".row").count() == 3, "a post stays in To do until the message is dealt with too"
-        dash.click("text=Mark as sent")
+        assert dash.locator(".row").count() == 3, "still in To do: the suggestion-giver has not been dealt with"
+        dash.click('button[data-p="helper"][data-set="Skip"]')
         time.sleep(0.5)
         saved = {i["id"]: i for i in sw.evaluate("chrome.storage.local.get('items').then(r => r.items)")}
-        assert saved["g1"]["dmStatus"] == "Sent" and saved["g1"]["commentStatus"] == "Posted" and saved["g1"]["dmEdit"] == "My own edited message to Alice."
+        people_g1 = {p["author"]: p for p in saved["g1"]["people"]}
+        assert people_g1["alice"]["dmStatus"] == "Sent" and people_g1["alice"]["dmEdit"] == "My own edited message to Alice."
+        assert people_g1["helper"]["dmStatus"] == "Skip" and saved["g1"]["commentStatus"] == "Posted"
         assert dash.locator(".row").count() == 2, "now it moves out of To do"
         dash.reload()
         dash.wait_for_selector(".row")
-        assert dash.locator(".row").count() == 2
         chips = dash.inner_text("#chips").replace("\n", " ")
         assert "To do 2" in chips and "Sent 1" in chips, chips
         dash.locator("#chips button", has_text="Sent").click()
         dash.locator(".row").first.click()
-        assert dash.input_value('[data-edit="dm"]') == "My own edited message to Alice."
-        print("statuses and edits persist across a reload:", chips)
+        assert dash.input_value('[data-edit="dm"][data-p="alice"]') == "My own edited message to Alice."
+        # taking a step back is possible too
+        dash.click('button[data-p="alice"][data-set="To send"]')
+        time.sleep(0.4)
+        assert "To do 3" in dash.inner_text("#chips").replace("\n", " ")
+        print("statuses and edits persist across a reload; several people per post:", chips)
 
         # 6. a second run does not repeat posts or people
         popup.click("#run")

@@ -32,7 +32,7 @@ export const reddit = (base) => ({
     return (data?.data?.children || []).filter((c) => c.kind === 't3').map((c) => c.data)
   },
   async comments(postId) {
-    const data = await getJson(base, `/comments/${encodeURIComponent(postId)}.json?sort=top&limit=40&depth=1&raw_json=1`)
+    const data = await getJson(base, `/comments/${encodeURIComponent(postId)}.json?sort=top&limit=100&depth=1&raw_json=1`)
     return data?.[1]?.data?.children || []
   },
   async rules(sub) {

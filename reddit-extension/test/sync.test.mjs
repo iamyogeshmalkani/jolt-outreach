@@ -5,10 +5,11 @@ import {
   LOCAL_ONLY, MAX_ITEMS, SYNC_FILE, checkSync, mergeItem, mergeItems, mergeSeen, mergeSettings, mergeStates, readLocal, sameState, syncFromSettings, syncNow, writeLocal,
 } from '../lib/sync.js'
 
+const person = (author, over = {}) => ({ author, body: 'b', why: 'top', opener: 'o', dmStatus: 'To send', dmAt: 0, ...over })
 const item = (id, over = {}) => ({
-  id, sub: 'nosurf', title: `Post ${id}`, comment: 'a reply', opener: 'an opener', top: { author: 'alice' },
-  dmStatus: 'To send', commentStatus: 'To post', dmAt: 0, commentAt: 0, foundAt: 1000, ...over,
+  id, sub: 'nosurf', title: `Post ${id}`, comment: 'a reply', commentStatus: 'To post', commentAt: 0, foundAt: 1000, people: [person('alice')], ...over,
 })
+const alice = (it) => it.people.find((p) => p.author === 'alice')
 
 // A chrome.storage.local stand-in.
 const memoryStore = (initial = {}) => {
@@ -54,38 +55,65 @@ const remoteData = (state) => JSON.parse(state.file)
 
 test('two devices changing different parts of one post both keep their change', () => {
   const base = item('p1')
-  const deviceA = { ...base, dmStatus: 'Sent', dmAt: 5000 }
-  const deviceB = { ...base, commentStatus: 'Posted', commentAt: 6000 }
+  const deviceA = item('p1', { people: [person('alice', { dmStatus: 'Sent', dmAt: 5000 })] }) // messaged the person
+  const deviceB = { ...base, commentStatus: 'Posted', commentAt: 6000 } // posted the reply
   for (const merged of [mergeItem(deviceA, deviceB), mergeItem(deviceB, deviceA)]) {
-    assert.equal(merged.dmStatus, 'Sent')
+    assert.equal(alice(merged).dmStatus, 'Sent')
     assert.equal(merged.commentStatus, 'Posted')
-    assert.deepEqual([merged.dmAt, merged.commentAt], [5000, 6000])
+    assert.deepEqual([alice(merged).dmAt, merged.commentAt], [5000, 6000])
   }
 })
 
+test('two devices messaging different people on one post both keep their change', () => {
+  const both = [person('alice'), person('bob', { why: 'suggestion' })]
+  const deviceA = item('p1', { people: [person('alice', { dmStatus: 'Sent', dmAt: 5000 }), both[1]] })
+  const deviceB = item('p1', { people: [both[0], person('bob', { why: 'suggestion', dmStatus: 'Skip', dmAt: 6000 })] })
+  for (const merged of [mergeItem(deviceA, deviceB), mergeItem(deviceB, deviceA)]) {
+    assert.deepEqual(merged.people.map((p) => [p.author, p.dmStatus]), [['alice', 'Sent'], ['bob', 'Skip']])
+  }
+})
+
+test('a person found on one device only is kept, with the top commenter first and the usernames matched without regard to case', () => {
+  const a = item('p1', { people: [person('Alice'), person('zed', { why: 'suggestion', strength: 1 })] })
+  const b = item('p1', { people: [person('alice', { dmStatus: 'Sent', dmAt: 9 }), person('mia', { why: 'suggestion', strength: 4 })] })
+  const merged = mergeItem(a, b)
+  assert.deepEqual(merged.people.map((p) => p.author.toLowerCase()), ['alice', 'mia', 'zed'], 'top first, then strongest suggestion first')
+  assert.equal(merged.people.filter((p) => p.author.toLowerCase() === 'alice').length, 1)
+  assert.equal(merged.people[0].dmStatus, 'Sent')
+})
+
 test('for the same part, the newest change wins on every device', () => {
-  const a = item('p1', { dmStatus: 'Sent', dmAt: 5000 })
-  const b = item('p1', { dmStatus: 'Replied', dmAt: 7000 })
-  assert.equal(mergeItem(a, b).dmStatus, 'Replied')
-  assert.equal(mergeItem(b, a).dmStatus, 'Replied')
+  const a = item('p1', { people: [person('alice', { dmStatus: 'Sent', dmAt: 5000 })] })
+  const b = item('p1', { people: [person('alice', { dmStatus: 'Replied', dmAt: 7000 })] })
+  assert.equal(alice(mergeItem(a, b)).dmStatus, 'Replied')
+  assert.equal(alice(mergeItem(b, a)).dmStatus, 'Replied')
 })
 
 test('"restore original" travels too: an edit removed on one device is removed on the other', () => {
-  const edited = item('p1', { dmEdit: 'my own words', dmAt: 5000 })
-  const restored = item('p1', { dmAt: 8000 }) // no dmEdit any more
-  assert.ok(!('dmEdit' in mergeItem(edited, restored)))
-  assert.ok(!('dmEdit' in mergeItem(restored, edited)))
-  assert.equal(mergeItem(item('p1', { dmEdit: 'newer', dmAt: 9000 }), item('p1', { dmAt: 8000 })).dmEdit, 'newer')
+  const edited = item('p1', { people: [person('alice', { dmEdit: 'my own words', dmAt: 5000 })] })
+  const restored = item('p1', { people: [person('alice', { dmAt: 8000 })] }) // no dmEdit any more
+  assert.ok(!('dmEdit' in alice(mergeItem(edited, restored))))
+  assert.ok(!('dmEdit' in alice(mergeItem(restored, edited))))
+  assert.equal(alice(mergeItem(item('p1', { people: [person('alice', { dmEdit: 'newer', dmAt: 9000 })] }), item('p1', { people: [person('alice', { dmAt: 8000 })] }))).dmEdit, 'newer')
 })
 
 test('equally new versions resolve the same way whichever side merges them, so devices never ping-pong', () => {
-  const a = item('p1', { dmStatus: 'Sent', dmAt: 5000 })
-  const b = item('p1', { dmStatus: 'Skip', dmAt: 5000 })
+  const a = item('p1', { people: [person('alice', { dmStatus: 'Sent', dmAt: 5000 })] })
+  const b = item('p1', { people: [person('alice', { dmStatus: 'Skip', dmAt: 5000 })] })
   assert.deepEqual(mergeItem(a, b), mergeItem(b, a))
   const x = [item('p1'), item('p2', { foundAt: 3000 })]
-  const y = [item('p2', { foundAt: 3000, dmStatus: 'Sent', dmAt: 1 }), item('p3', { foundAt: 2000 })]
+  const y = [item('p2', { foundAt: 3000, people: [person('alice', { dmStatus: 'Sent', dmAt: 1 }), person('bob', { why: 'suggestion' })] }), item('p3', { foundAt: 2000 })]
   assert.deepEqual(mergeItems(x, y), mergeItems(y, x))
   assert.deepEqual(mergeItems(mergeItems(x, y), y), mergeItems(x, y), 'merging again changes nothing')
+})
+
+test('items saved by the older single-person version merge with the new shape', () => {
+  const old = { id: 'p1', sub: 'x', foundAt: 1000, commentStatus: 'To post', top: { author: 'alice', body: 'b', score: 1, url: 'u' }, opener: 'o', dmStatus: 'Sent', dmAt: 5000 }
+  const current = item('p1', { people: [person('alice', { dmStatus: 'Replied', dmAt: 7000 }), person('bob', { why: 'suggestion' })] })
+  const merged = mergeItem(old, current)
+  assert.deepEqual(merged.people.map((p) => [p.author, p.dmStatus]), [['alice', 'Replied'], ['bob', 'To send']])
+  assert.ok(!('top' in merged))
+  assert.deepEqual(mergeItems([old], []).map((i) => i.people[0].dmStatus), ['Sent'])
 })
 
 test('a post found on only one device is kept, newest first, and the list is capped', () => {
@@ -156,17 +184,17 @@ test('a second device receives what the first one shared, and shares its own', a
 test('devices working at the same time lose nothing: a conflict is read and merged again', async () => {
   const { state, server, api } = await fakeGitHub()
   try {
-    const a = memoryStore({ items: [item('p1', { dmStatus: 'Sent', dmAt: 5000 })], seen: {}, settings: {} })
+    const a = memoryStore({ items: [item('p1', { people: [person('alice', { dmStatus: 'Sent', dmAt: 5000 })] })], seen: {}, settings: {} })
     const b = memoryStore({ items: [item('p1', { commentStatus: 'Posted', commentAt: 6000 })], seen: {}, settings: {} })
     await syncNow(a, cfg(api))
     state.failNext = 1 // B's first save is rejected, as if another device saved just before
     await syncNow(b, cfg(api))
     await syncNow(a, cfg(api))
     for (const store of [a, b]) {
-      assert.equal(store.data.items[0].dmStatus, 'Sent')
+      assert.equal(store.data.items[0].people[0].dmStatus, 'Sent')
       assert.equal(store.data.items[0].commentStatus, 'Posted')
     }
-    assert.deepEqual(remoteData(state).items[0].dmStatus, 'Sent')
+    assert.deepEqual(remoteData(state).items[0].people[0].dmStatus, 'Sent')
   } finally { server.close() }
 })
 
@@ -206,5 +234,5 @@ test('a hand-edited or damaged file is reported instead of being overwritten', a
 test('equal states are recognised as equal', () => {
   const s = { items: [item('p1')], seen: { posts: ['a'], authors: [] }, settings: { subs: 'x', settingsAt: 1 } }
   assert.ok(sameState(s, structuredClone(s)))
-  assert.ok(!sameState(s, { ...s, items: [item('p1', { dmStatus: 'Sent', dmAt: 9 })] }))
+  assert.ok(!sameState(s, { ...s, items: [item('p1', { people: [person('alice', { dmStatus: 'Sent', dmAt: 9 })] })] }))
 })

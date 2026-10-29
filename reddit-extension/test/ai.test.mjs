@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import http from 'node:http'
-import { OPENER_SYSTEM, REPLY_SYSTEM, ask, check, draft, keyProblem, parseList, providerOf } from '../lib/ai.js'
+import { JUDGE_SYSTEM, OPENER_SYSTEM, REPLY_SYSTEM, ask, check, draft, judge, keyProblem, parseList, providerOf } from '../lib/ai.js'
 import { normalize } from '../lib/settings.js'
 
 function fake(reply) {
@@ -27,7 +27,8 @@ const systemOf = (body) => thread(body).find((m) => m.role === 'system')?.conten
 const userOf = (body) => thread(body).find((m) => m.role === 'user').content
 const groq = (api, extra = {}) => ({ provider: 'groq', key: 'gsk_test', api, ...extra })
 const xai = (api, extra = {}) => ({ provider: 'xai', key: 'xai-test', api, ...extra })
-const item = (n, top = true) => ({ sub: 'nosurf', title: `Post ${n}`, body: `Body ${n}`, comment: '', opener: `FALLBACK-${n}`, top: top ? { author: `u${n}`, body: `Comment ${n} about quitting scrolling` } : null })
+const person = (n, why = 'top', extra = {}) => ({ author: `u${n}`, why, body: `Comment ${n} about quitting scrolling`, opener: `FALLBACK-${n}`, dmStatus: 'To send', ...extra })
+const item = (n, hasPerson = true) => ({ sub: 'nosurf', title: `Post ${n}`, body: `Body ${n}`, comment: '', people: hasPerson ? [person(n)] : [] })
 const GOOD_REPLY = 'That balance between wanting to stay informed and wanting your attention back is hard. What would a good day on your phone look like?'
 
 test('a key from the other provider is spotted before anything is sent', async () => {
@@ -111,23 +112,26 @@ test('reads a list even when the model adds words around it', () => {
 })
 
 for (const [name, cfgOf, textOf] of [['Groq', groq, groqText], ['Grok (xAI)', xai, xaiText]]) {
-  test(`${name}: drafts a reply for every post and an opening line for every post that has a commenter`, async () => {
+  test(`${name}: drafts a reply for every post and an opening line for every person`, async () => {
     const { seen, server, api } = await fake((body) => {
       const n = JSON.parse(userOf(body)).length
       return textOf(JSON.stringify(Array.from({ length: n }, (_, i) => (systemOf(body) === REPLY_SYSTEM ? GOOD_REPLY + ` (${i})` : `Your point about quitting really landed (${i}).`))))
     })
     try {
       const items = [item(1), item(2, false), item(3)]
+      items[0].people.push(person(4, 'suggestion'))
       const lines = []
       const used = await draft(cfgOf(api), items, async (l) => lines.push(l))
-      assert.deepEqual(used, { comments: 3, openers: 2 })
+      assert.deepEqual(used, { comments: 3, openers: 3 })
       assert.ok(items.every((i) => i.comment.startsWith('That balance')))
-      assert.deepEqual(items.map((i) => i.opener), ['Your point about quitting really landed (0).', 'FALLBACK-2', 'Your point about quitting really landed (1).'])
+      assert.deepEqual(items.flatMap((i) => i.people.map((p) => p.opener)), ['Your point about quitting really landed (0).', 'Your point about quitting really landed (1).', 'Your point about quitting really landed (2).'])
       const replyCall = seen.find((s) => systemOf(s.body) === REPLY_SYSTEM)
       assert.deepEqual(JSON.parse(userOf(replyCall.body))[0], { subreddit: 'nosurf', title: 'Post 1', body: 'Body 1' })
       const openerCall = seen.find((s) => systemOf(s.body) === OPENER_SYSTEM)
-      assert.deepEqual(JSON.parse(userOf(openerCall.body)).map((x) => x.comment), ['Comment 1 about quitting scrolling', 'Comment 3 about quitting scrolling'])
-      assert.ok(lines.some((l) => l.includes(`${name} wrote 3 replies and 2 opening lines`)), lines.join('|'))
+      assert.deepEqual(JSON.parse(userOf(openerCall.body)).map((x) => [x.comment, x.kind]), [
+        ['Comment 1 about quitting scrolling', 'comment'], ['Comment 4 about quitting scrolling', 'suggestion or review'], ['Comment 3 about quitting scrolling', 'comment'],
+      ])
+      assert.ok(lines.some((l) => l.includes(`${name} wrote 3 replies and 3 opening lines`)), lines.join('|'))
     } finally { server.close() }
   })
 
@@ -137,11 +141,10 @@ for (const [name, cfgOf, textOf] of [['Groq', groq, groqText], ['Grok (xAI)', xa
         ? [GOOD_REPLY, 'Try Jolt, it helps with exactly this problem for people.', 'See https://example.com for the full guide on doing this properly.']
         : ['visit https://example.com', 'short'])))
     try {
-      const items = [item(1), item(2), item(3)]
-      items[2].top = null
+      const items = [item(1), item(2), item(3, false)]
       const used = await draft(cfgOf(api), items)
       assert.deepEqual(items.map((i) => i.comment), [GOOD_REPLY, '', ''])
-      assert.deepEqual(items.map((i) => i.opener), ['FALLBACK-1', 'FALLBACK-2', 'FALLBACK-3'])
+      assert.deepEqual(items.flatMap((i) => i.people.map((p) => p.opener)), ['FALLBACK-1', 'FALLBACK-2'])
       assert.deepEqual(used, { comments: 1, openers: 0 })
     } finally { server.close() }
   })
@@ -153,7 +156,7 @@ for (const [name, cfgOf, textOf] of [['Groq', groq, groqText], ['Grok (xAI)', xa
       const lines = []
       assert.deepEqual(await draft(cfgOf(api), items, async (l) => lines.push(l)), { comments: 0, openers: 0 })
       assert.equal(items[0].comment, '')
-      assert.equal(items[0].opener, 'FALLBACK-1')
+      assert.equal(items[0].people[0].opener, 'FALLBACK-1')
       assert.equal(lines.filter((l) => /did not accept the API key/.test(l)).length, 2)
     } finally { server.close() }
   })
@@ -167,7 +170,62 @@ for (const [name, cfgOf, textOf] of [['Groq', groq, groqText], ['Grok (xAI)', xa
     const empty = await fake(() => textOf(''))
     try { await assert.rejects(check(cfgOf(empty.api)), /answered with nothing/) } finally { empty.server.close() }
   })
+
+  test(`${name}: confirms which suggestion-givers really give a suggestion or review`, async () => {
+    const { seen, server, api } = await fake(() => textOf('[true, false, true]'))
+    try {
+      const items = [
+        { sub: 'nosurf', title: 'Post A', people: [person(1), person(2, 'suggestion', { tentative: true }), person(3, 'suggestion', { tentative: true })] },
+        { sub: 'nosurf', title: 'Post B', people: [person(4, 'suggestion', { tentative: true })] },
+      ]
+      const lines = []
+      const out = await judge(cfgOf(api), items, async (l) => lines.push(l))
+      assert.deepEqual(out, { confirmed: 2, rejected: 1 })
+      assert.deepEqual(items.flatMap((i) => i.people.map((p) => [p.author, p.verdict])), [['u1', undefined], ['u2', true], ['u3', false], ['u4', true]])
+      assert.equal(seen.length, 1, 'one request for all of them')
+      assert.equal(systemOf(seen[0].body), JUDGE_SYSTEM)
+      assert.deepEqual(JSON.parse(userOf(seen[0].body)), [
+        { subreddit: 'nosurf', post: 'Post A', comment: 'Comment 2 about quitting scrolling' },
+        { subreddit: 'nosurf', post: 'Post A', comment: 'Comment 3 about quitting scrolling' },
+        { subreddit: 'nosurf', post: 'Post B', comment: 'Comment 4 about quitting scrolling' },
+      ])
+      assert.ok(lines.some((l) => l.includes(`${name} checked the suggestions: 2 kept, 1 dropped`)))
+    } finally { server.close() }
+  })
 }
+
+test('judging: a failure or a malformed answer decides nothing, so the keyword match stands', async () => {
+  const mk = () => [{ sub: 'x', title: 'T', people: [person(1, 'suggestion', { tentative: true }), person(2, 'suggestion', { tentative: true })] }]
+  const down = await fake(() => [401, {}])
+  try {
+    const items = mk()
+    const lines = []
+    assert.deepEqual(await judge(groq(down.api), items, async (l) => lines.push(l)), { confirmed: 0, rejected: 0 })
+    assert.ok(items[0].people.every((p) => p.verdict === undefined))
+    assert.ok(lines.some((l) => /could not check the suggestions.*keyword matching/.test(l)))
+  } finally { down.server.close() }
+  const odd = await fake(() => groqText('["yes", false]'))
+  try {
+    const items = mk()
+    await judge(groq(odd.api), items)
+    assert.deepEqual(items[0].people.map((p) => p.verdict), [undefined, false], 'only real true or false answers count')
+  } finally { odd.server.close() }
+  const none = await fake(() => groqText('[]'))
+  try {
+    await judge(groq(none.api), [{ sub: 'x', title: 'T', people: [person(1)] }])
+    assert.equal(none.seen.length, 0, 'nothing to judge, nothing sent')
+  } finally { none.server.close() }
+})
+
+test('judging works through many in groups of twenty', async () => {
+  const { seen, server, api } = await fake((body) => groqText(JSON.stringify(JSON.parse(userOf(body)).map(() => true))))
+  try {
+    const items = [{ sub: 'x', title: 'T', people: Array.from({ length: 45 }, (_, i) => person(i, 'suggestion', { tentative: true })) }]
+    const out = await judge(groq(api), items)
+    assert.deepEqual(seen.map((s) => JSON.parse(userOf(s.body)).length), [20, 20, 5])
+    assert.equal(out.confirmed, 45)
+  } finally { server.close() }
+})
 
 test('works through many posts in batches', async () => {
   const { seen, server, api } = await fake((body) => groqText(JSON.stringify(Array.from({ length: JSON.parse(userOf(body)).length }, () => GOOD_REPLY))))

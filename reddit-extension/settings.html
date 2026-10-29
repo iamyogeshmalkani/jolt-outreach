@@ -24,6 +24,10 @@
         <label>At least this many comments <input id="minComments" type="number" min="0" /></label>
         <label>At least this many upvotes <input id="minScore" type="number" min="0" /></label>
       </div>
+      <label>Also message people who give suggestions or reviews, per post
+        <input id="suggesters" type="number" min="0" max="5" />
+      </label>
+      <p class="hint">Besides the top commenter, it looks for other commenters who recommend something, give a tip or say what worked for them. 0 turns it off. With an AI key set, the AI confirms each one.</p>
       <label>Users to skip (already contacted)
         <textarea id="skip" rows="2" placeholder="one username per line"></textarea>
       </label>

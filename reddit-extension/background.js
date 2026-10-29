@@ -1,9 +1,9 @@
 // Finds the top posts in your subreddits and their top commenter, then drafts a message and a reply with an AI model (Groq or Grok).
 // It only reads Reddit, in your own Chrome. You send every message and post every reply yourself.
 import { find } from './lib/finder.js'
-import { draft } from './lib/ai.js'
+import { draft, judge } from './lib/ai.js'
 import { reddit } from './lib/reddit.js'
-import { parseSubs } from './lib/rules.js'
+import { parseSubs, settle, upgradeItem } from './lib/rules.js'
 import { MAX_ITEMS, syncFromSettings } from './lib/sync.js'
 import { normalize } from './lib/settings.js'
 
@@ -42,21 +42,22 @@ async function run() {
     const { items: existing = [], seen = {} } = await store.get(['items', 'seen'])
     const known = {
       posts: new Set([...(seen.posts || []), ...existing.map((i) => i.id)]),
-      authors: new Set([...(seen.authors || []), ...existing.filter((i) => i.top).map((i) => i.top.author.toLowerCase())]),
+      authors: new Set([...(seen.authors || []), ...existing.map(upgradeItem).flatMap((i) => i.people.map((p) => p.author.toLowerCase()))]),
     }
     const { items, stopped } = await find(reddit(s.redditBase), s, known, log, pause) // `redditBase` is only set by tests
-    if (items.length && s.aiKey && s.useAi) {
-      await draft({ provider: s.provider, key: s.aiKey.trim(), model: s.model, ...(s.aiApi ? { api: s.aiApi } : {}) }, items, log) // `aiApi` is only set by tests
-    }
+    const ai = s.aiKey && s.useAi ? { provider: s.provider, key: s.aiKey.trim(), model: s.model, ...(s.aiApi ? { api: s.aiApi } : {}) } : null // `aiApi` is only set by tests
+    if (ai && items.length) await judge(ai, items, log) // keep only the suggesters the AI agrees give a suggestion or review
+    settle(items, s.suggesters, known.authors) // best few per post, nobody twice
+    if (ai && items.length) await draft(ai, items, log)
 
     // Merge with what is stored now, because the dashboard may have changed statuses while this ran.
     const { items: current = [] } = await store.get('items')
     const ids = new Set(items.map((i) => i.id))
     await store.set({
-      items: [...items, ...current.filter((i) => !ids.has(i.id))].slice(0, MAX_ITEMS),
+      items: [...items, ...current.map(upgradeItem).filter((i) => !ids.has(i.id))].slice(0, MAX_ITEMS),
       seen: {
         posts: [...known.posts, ...ids].slice(-3000),
-        authors: [...known.authors, ...items.filter((i) => i.top).map((i) => i.top.author.toLowerCase())].slice(-3000),
+        authors: [...known.authors, ...items.flatMap((i) => i.people.map((p) => p.author.toLowerCase()))].slice(-3000),
       },
     })
 

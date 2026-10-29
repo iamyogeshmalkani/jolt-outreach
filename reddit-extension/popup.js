@@ -1,4 +1,4 @@
-import { parseSubs } from './lib/rules.js'
+import { parseSubs, pending, upgradeItem } from './lib/rules.js'
 import { normalize } from './lib/settings.js'
 
 const $ = (id) => document.getElementById(id)
@@ -6,7 +6,7 @@ const $ = (id) => document.getElementById(id)
 async function render() {
   const { settings = {}, status = {}, log = [], items = [] } = await chrome.storage.local.get(['settings', 'status', 'log', 'items'])
   const s = normalize(settings)
-  const todo = items.filter((i) => i.dmStatus === 'To send' || i.commentStatus === 'To post').length
+  const todo = items.map(upgradeItem).filter(pending).length
   let state = 'Idle.'
   if (!parseSubs(s.subs).length) state = 'Add the subreddits to look in, in Settings.'
   else if (status.running) state = 'Looking through your subreddits. This takes a minute or two.'

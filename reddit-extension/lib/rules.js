@@ -40,26 +40,61 @@ export function postProblem(p, { minScore = 0, minComments = 0 } = {}) {
   return ''
 }
 
-// The highest-scoring top-level comment from a real person: not the poster, not a moderator or bot, not someone already contacted.
-export function pickTopCommenter(children, { postAuthor = '', skipUsers = new Set() } = {}) {
-  for (const child of children || []) {
-    if (child?.kind !== 't1') continue
-    const c = child.data || {}
-    const body = (c.body || '').trim()
-    const author = c.author || ''
-    if (!author || author === '[deleted]' || looksLikeBot(author)) continue
-    if (author.toLowerCase() === postAuthor.toLowerCase() || skipUsers.has(author.toLowerCase())) continue
-    if (c.distinguished || c.stickied) continue
-    if (!body || body === '[removed]' || body === '[deleted]' || body.length < 20) continue
-    if (LINK.test(body) || MINOR.test(body) || SENSITIVE.test(body) || SEXUAL.test(body)) continue
-    return {
-      author,
-      body: body.length > MAX_BODY ? body.slice(0, MAX_BODY).replace(/\s+\S*$/, '') + '…' : body,
-      score: c.score ?? 0,
-      url: c.permalink ? `https://www.reddit.com${c.permalink}` : '',
-    }
+// A comment from a real person we could write to: not the poster, a moderator, a bot or someone already contacted; long enough
+// to say something; no links; nothing that suggests a minor or a sensitive topic. Returns the cleaned comment, or null.
+export function usableComment(child, { postAuthor = '', skipUsers = new Set() } = {}) {
+  if (child?.kind !== 't1') return null
+  const c = child.data || {}
+  const body = (c.body || '').trim()
+  const author = c.author || ''
+  if (!author || author === '[deleted]' || looksLikeBot(author)) return null
+  if (author.toLowerCase() === postAuthor.toLowerCase() || skipUsers.has(author.toLowerCase())) return null
+  if (c.distinguished || c.stickied) return null
+  if (!body || body === '[removed]' || body === '[deleted]' || body.length < 20) return null
+  if (LINK.test(body) || MINOR.test(body) || SENSITIVE.test(body) || SEXUAL.test(body)) return null
+  return {
+    author,
+    body: body.length > MAX_BODY ? body.slice(0, MAX_BODY).replace(/\s+\S*$/, '') + '…' : body,
+    score: c.score ?? 0,
+    url: c.permalink ? `https://www.reddit.com${c.permalink}` : '',
   }
-  return null
+}
+
+// Language of someone giving a recommendation, a tip, a review or what worked for them.
+const SUGGESTION_PHRASES = [
+  /\b(i|we)('d| would| highly| definitely| can| can't)? (strongly )?recommend/i,
+  /\b(you should|you could|you might want|you can try|you may want|try (using|out|turning|switching|deleting|setting|the)|consider (using|trying|getting))\b/i,
+  /\b(works?|worked|working) (for me|really well|great|wonders)\b/i,
+  /\b(helped|helps) (me|a lot|so much)\b/i,
+  /\b(what (helped|worked|works|i did)|here'?s what|my (advice|tips?|suggestion|routine|setup)|pro.?tip|tip:|for what it'?s worth)\b/i,
+  /\bi (use|used|switched|swapped|installed|downloaded|deleted|uninstalled|set up|turned off|turned on|blocked|replaced|bought)\b/i,
+  /\bi('ve| have) (been using|found|tried|started|stopped|switched|deleted|blocked)\b/i,
+  /\b(game.?changer|life.?changing|worth (it|trying)|can'?t go back|highly effective)\b/i,
+]
+// Things people tend to recommend for phone habits. Mentioning one makes a suggestion more likely to be a real one.
+const SUGGESTION_TOPICS = /\b(opal|one ?sec|brick|screenzen|forest|freedom|clearspace|jomo|cold turkey|appblock|stayfree|digital wellbeing|screen ?time|focus mode|grayscale|greyscale|dumb ?phone|flip phone|light phone|kindle|app limit|downtime|blocker|launcher)\b/i
+
+// 0 means it does not look like a suggestion or review; higher means more clearly one.
+export function suggestionStrength(body) {
+  if ((body || '').length < 40) return 0
+  const hits = SUGGESTION_PHRASES.filter((rx) => rx.test(body)).length
+  if (!hits) return 0
+  return hits + (SUGGESTION_TOPICS.test(body) ? 1 : 0) + (body.length > 200 ? 1 : 0)
+}
+
+// The top commenter, plus (if `wantSuggesters` is above 0) a few other commenters who look like they are giving a suggestion or review.
+// The suggesters are tentative: they can be confirmed by the AI and are trimmed to the wanted number later by settle().
+export function pickPeople(children, { postAuthor = '', skipUsers = new Set(), wantSuggesters = 0 } = {}) {
+  const usable = (children || []).map((c) => usableComment(c, { postAuthor, skipUsers })).filter(Boolean)
+  const [top, ...rest] = usable
+  const suggesters = wantSuggesters > 0
+    ? rest
+        .map((c) => ({ ...c, strength: suggestionStrength(c.body) }))
+        .filter((c) => c.strength > 0)
+        .sort((x, y) => y.strength - x.strength || y.score - x.score)
+        .slice(0, wantSuggesters * 2)
+    : []
+  return { top: top || null, suggesters }
 }
 
 // Names of the subreddit's rules that mention promotion, surveys, research or DMs.
@@ -76,7 +111,21 @@ const snippet = (text, n) => {
   return t.length > n ? t.slice(0, n).replace(/\s+\S*$/, '') + '…' : t
 }
 
-export function makeItem(post, top, flags, today = new Date().toISOString().slice(0, 10)) {
+export function makePerson(c, why, sub) {
+  return {
+    author: c.author,
+    body: c.body,
+    score: c.score,
+    url: c.url,
+    why, // 'top' (the highest-scoring comment) or 'suggestion' (someone giving a recommendation or review)
+    ...(c.strength ? { strength: c.strength } : {}),
+    opener: `Saw your ${why === 'suggestion' ? 'suggestion' : 'comment'} on r/${sub} about “${snippet(c.body, 60)}”.`,
+    dmStatus: 'To send',
+    dmAt: 0, // when this person's message was last changed: syncing keeps the newest
+  }
+}
+
+export function makeItem(post, { top = null, suggesters = [] } = {}, flags = [], today = new Date().toISOString().slice(0, 10)) {
   return {
     id: post.id,
     sub: post.subreddit,
@@ -86,17 +135,55 @@ export function makeItem(post, top, flags, today = new Date().toISOString().slic
     score: post.score ?? 0,
     comments: post.num_comments ?? 0,
     flags,
-    top,
+    people: [
+      ...(top ? [makePerson(top, 'top', post.subreddit)] : []),
+      ...suggesters.map((c) => ({ ...makePerson(c, 'suggestion', post.subreddit), tentative: true })),
+    ],
     comment: '',
-    opener: top ? `Saw your comment on r/${post.subreddit} about “${snippet(top.body, 60)}”.` : '',
-    dmStatus: 'To send',
     commentStatus: 'To post',
-    dmAt: 0, // when the message part and the reply part were last changed: syncing keeps the newest of each
-    commentAt: 0,
+    commentAt: 0, // when the reply part was last changed
     foundAt: Date.now(),
     added: today,
   }
 }
+
+// Old items had one person in `top` with the message status on the item itself. Bring them to the current shape.
+export function upgradeItem(it) {
+  if (it.people) return it
+  const { top, opener, dmStatus, dmEdit, dmAt, ...rest } = it
+  return {
+    ...rest,
+    people: top
+      ? [{ ...top, why: 'top', opener: opener || '', dmStatus: dmStatus ?? 'To send', ...(dmEdit !== undefined ? { dmEdit } : {}), dmAt: dmAt ?? 0 }]
+      : [],
+  }
+}
+
+// After the AI has had its say: drop any suggester it rejected (verdict === false), keep the best few per post, and never offer the
+// same person twice across posts. Marks everyone as settled.
+export function settle(items, perPost, seenAuthors = new Set()) {
+  const taken = new Set(seenAuthors)
+  for (const item of items) {
+    const kept = []
+    let suggesters = 0
+    for (const p of item.people) {
+      const key = p.author.toLowerCase()
+      if (taken.has(key) || p.verdict === false) continue
+      if (p.tentative) {
+        if (suggesters >= perPost) continue
+        suggesters++
+      }
+      taken.add(key)
+      const { tentative, verdict, ...clean } = p
+      kept.push(clean)
+    }
+    item.people = kept
+  }
+  return items
+}
+
+// A post still needs attention if a person has not been messaged yet, or the reply has not been posted.
+export const pending = (it) => it.people.some((p) => p.dmStatus === 'To send') || it.commentStatus === 'To post'
 
 export function shuffled(arr) {
   const a = [...arr]

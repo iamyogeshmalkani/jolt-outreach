@@ -105,18 +105,20 @@ def main():
         dashA.wait_for_selector(".row")
         dashA.locator(".row", has_text="Post g1").click()
         dashB.locator(".row", has_text="Post g1").click()
-        dashA.click("text=Mark as sent")      # A: the message to the commenter
-        dashB.click("text=Mark as posted")    # B: the reply to the post, before B has heard from A
+        dashA.click('button[data-p="alice"][data-set="Sent"]')   # A: the message to the top commenter
+        dashB.click("text=Mark as posted")                       # B: the reply to the post, before B has heard from A
+        dashB.click('button[data-p="helper"][data-set="Skip"]')  # B: skips the suggestion-giver on the same post
         time.sleep(7)                         # each syncs a moment after its change
         dashA.click("#sync")
         dashB.click("#sync")
         time.sleep(3)
+        def check(g1, where):
+            who = {p["author"]: p["dmStatus"] for p in g1["people"]}
+            assert who == {"alice": "Sent", "helper": "Skip"} and g1["commentStatus"] == "Posted", (where, who, g1["commentStatus"])
         for name, sw in (("A", swA), ("B", swB)):
-            g1 = items_of(sw)["g1"]
-            assert g1["dmStatus"] == "Sent" and g1["commentStatus"] == "Posted", (name, g1)
-        g1 = {i["id"]: i for i in remote()["items"]}["g1"]
-        assert g1["dmStatus"] == "Sent" and g1["commentStatus"] == "Posted", g1
-        print("simultaneous changes to one post: both survive on A, B and GitHub")
+            check(items_of(sw)["g1"], name)
+        check({i["id"]: i for i in remote()["items"]}["g1"], "GitHub")
+        print("simultaneous changes to one post (two people and the reply): all survive on A, B and GitHub")
 
         # 4. B runs the finder: it already knows what A found, so nothing is found twice
         before = len(GROK_CALLS)

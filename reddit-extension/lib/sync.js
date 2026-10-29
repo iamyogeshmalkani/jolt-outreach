@@ -8,20 +8,21 @@ export const MAX_SEEN = 3000
 export const LOCAL_ONLY = ['aiKey', 'xaiKey', 'syncRepo', 'syncToken', 'syncApi', 'redditBase', 'aiApi']
 const SYNCED_SETTINGS = ['subs', 'period', 'postsPerSub', 'minComments', 'minScore', 'skip', 'provider', 'model', 'useAi', 'name', 'offer', 'body', 'subject']
 
-// A post has two parts people change on their own: the message to the commenter, and the reply. Each part carries the time it was last changed.
-const GROUPS = [
-  { keys: ['dmStatus', 'dmEdit'], at: 'dmAt' },
-  { keys: ['commentStatus', 'commentEdit'], at: 'commentAt' },
-]
+import { upgradeItem } from './rules.js'
+
+// Each thing people change on their own carries the time it was last changed: the reply to a post, and the message to each person on it.
+const REPLY = { keys: ['commentStatus', 'commentEdit'], at: 'commentAt' }
+const MESSAGE = { keys: ['dmStatus', 'dmEdit'], at: 'dmAt' }
 
 const text = (x) => JSON.stringify(x)
 // When two versions are equally new, both devices must pick the same one, or they would keep overwriting each other.
 const tieBreak = (a, b) => (text(a) <= text(b) ? a : b)
 
-export function mergeItem(a, b) {
+// Newest change wins, separately for each group of fields. Used for the reply to a post and for the message to a person.
+function mergeGroups(a, b, groups) {
   const base = (a.foundAt ?? 0) !== (b.foundAt ?? 0) ? ((a.foundAt ?? 0) < (b.foundAt ?? 0) ? a : b) : tieBreak(a, b)
   const out = { ...base }
-  for (const { keys, at } of GROUPS) {
+  for (const { keys, at } of groups) {
     const x = a[at] ?? 0
     const y = b[at] ?? 0
     const src = x > y ? a : y > x ? b : tieBreak(a, b)
@@ -34,9 +35,28 @@ export function mergeItem(a, b) {
   return out
 }
 
+// People on a post are matched by username. A person found on one device only is kept.
+function mergePeople(a = [], b = []) {
+  const byAuthor = new Map()
+  for (const p of [...a, ...b]) {
+    const key = p.author.toLowerCase()
+    byAuthor.set(key, byAuthor.has(key) ? mergeGroups(byAuthor.get(key), p, [MESSAGE]) : p)
+  }
+  return [...byAuthor.values()].sort(
+    (x, y) => (x.why === 'top' ? 0 : 1) - (y.why === 'top' ? 0 : 1) || (y.strength ?? 0) - (x.strength ?? 0) || (x.author < y.author ? -1 : 1),
+  )
+}
+
+export function mergeItem(a, b) {
+  a = upgradeItem(a)
+  b = upgradeItem(b)
+  return { ...mergeGroups(a, b, [REPLY]), people: mergePeople(a.people, b.people) }
+}
+
 export function mergeItems(a = [], b = []) {
   const byId = new Map()
-  for (const item of [...a, ...b]) {
+  for (const raw of [...a, ...b]) {
+    const item = upgradeItem(raw) // older versions saved one person per post differently
     byId.set(item.id, byId.has(item.id) ? mergeItem(byId.get(item.id), item) : item)
   }
   return [...byId.values()]

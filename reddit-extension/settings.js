@@ -5,7 +5,7 @@ import { DEFAULTS, normalize } from './lib/settings.js'
 import { checkSync, syncFromSettings, syncNow } from './lib/sync.js'
 
 const $ = (id) => document.getElementById(id)
-const FIELDS = ['subs', 'period', 'postsPerSub', 'minComments', 'minScore', 'skip', 'provider', 'aiKey', 'model', 'name', 'offer', 'body', 'subject', 'syncRepo', 'syncToken']
+const FIELDS = ['subs', 'period', 'postsPerSub', 'minComments', 'minScore', 'suggesters', 'skip', 'provider', 'aiKey', 'model', 'name', 'offer', 'body', 'subject', 'syncRepo', 'syncToken']
 const say = (id, text, bad = false) => {
   $(id).textContent = text
   $(id).className = bad ? 'bad' : ''
@@ -31,6 +31,7 @@ function read(current) {
     postsPerSub: num('postsPerSub', DEFAULTS.postsPerSub, 1, 10),
     minComments: num('minComments', DEFAULTS.minComments, 0, 100000),
     minScore: num('minScore', DEFAULTS.minScore, 0, 100000),
+    suggesters: Math.min(5, Math.max(0, Number($('suggesters').value) || 0)),
     skip: $('skip').value,
     provider: $('provider').value,
     aiKey: $('aiKey').value.trim(),
