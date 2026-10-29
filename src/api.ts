@@ -53,7 +53,8 @@ async function fetchRemote<T>(file: string): Promise<T | null> {
 }
 
 export async function load(): Promise<Loaded> {
-  const data = await fetchLocal<{ dir: string; people: Person[]; videos: Video[] }>('data')
+  // On the hosted page the data always comes from GitHub, so don't look for a local service there.
+  const data = DATA_BASE ? null : await fetchLocal<{ dir: string; people: Person[]; videos: Video[] }>('data')
   let people: Person[], videos: Video[], dir = ''
   let saved: Partial<UiState> | null
   if (data) {

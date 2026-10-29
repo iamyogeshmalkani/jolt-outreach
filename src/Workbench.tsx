@@ -10,7 +10,8 @@ type SaveState = 'saved' | 'saving' | 'error'
 
 export default function Workbench({ loaded }: { loaded: Loaded }) {
   const [ui, setUi] = useState<UiState>(loaded.state)
-  const [kind, setKind] = useState<Kind>('people')
+  // Open on whichever list has something in it.
+  const [kind, setKind] = useState<Kind>(!loaded.demo && loaded.people.length === 0 && loaded.videos.length > 0 ? 'videos' : 'people')
   const [views, setViews] = useState<Record<Kind, number>>({ people: 0, videos: 0 })
   const [selected, setSelected] = useState<Record<Kind, string | null>>({ people: null, videos: null })
   const [pane, setPane] = useState<'list' | 'detail'>('list')
@@ -19,6 +20,10 @@ export default function Workbench({ loaded }: { loaded: Loaded }) {
   const online = loaded.mode === 'online'
 
   const statuses = STATUSES[kind]
+  const other =
+    kind === 'people'
+      ? { kind: 'videos' as Kind, label: 'Comments', noun: 'videos', count: loaded.videos.length }
+      : { kind: 'people' as Kind, label: 'Messages', noun: 'people', count: loaded.people.length }
   const viewDefs = VIEWS[kind]
   const view = views[kind]
   const items = useMemo(
@@ -135,6 +140,7 @@ export default function Workbench({ loaded }: { loaded: Loaded }) {
               onClick={() => { setKind(k); setPane('list') }}
             >
               {k === 'people' ? 'Messages' : 'Comments'}
+              <span className="count">{k === 'people' ? loaded.people.length : loaded.videos.length}</span>
             </button>
           ))}
         </nav>
@@ -191,6 +197,11 @@ export default function Workbench({ loaded }: { loaded: Loaded }) {
         onBack={() => setPane('list')}
         registerCopy={(fn) => { copyRef.current = fn }}
         emptyView={items.length > 0}
+        elsewhere={
+          items.length === 0 && other.count > 0
+            ? { noun: other.noun, label: other.label, count: other.count, go: () => { setKind(other.kind); setPane('list') } }
+            : undefined
+        }
         online={online}
         kind={kind}
       />

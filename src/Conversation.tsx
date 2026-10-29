@@ -14,6 +14,7 @@ type Props = {
   onBack: () => void
   registerCopy: (fn: () => void) => void
   emptyView: boolean
+  elsewhere?: { noun: string; label: string; count: number; go: () => void }
   online: boolean
   kind: Kind
 }
@@ -48,7 +49,13 @@ export default function Conversation(p: Props) {
           </>
         ) : (
           <>
-            <h2>Nothing to show yet</h2>
+            <h2>No {p.kind === 'people' ? 'people' : 'videos'} yet</h2>
+            {p.elsewhere && (
+              <p>
+                {p.elsewhere.count} {p.elsewhere.noun} found so far.{' '}
+                <button className="quiet" onClick={p.elsewhere.go}>Show {p.elsewhere.label}</button>
+              </p>
+            )}
             <p>
               {p.online
                 ? <>The Jolt finder extension in Chrome publishes here, and this page updates within about 5 minutes.</>
