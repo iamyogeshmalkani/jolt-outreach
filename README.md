@@ -40,25 +40,28 @@ The token stays in your Chrome and is only ever sent to GitHub. It can only touc
 - If a publish fails (no internet, or the token expired) it says so in the popup. Nothing is queued
   to retry: the next run finds new things.
 
-## Optional: draft comments and opening lines written by Claude
+## Optional: draft comments and opening lines written by AI
 
-Without this, drafts come from a few built-in templates. With an Anthropic API key, Claude writes each
-draft comment from that video's caption, and each opening line from what the person actually said.
+Without this, drafts come from a few built-in templates. With an API key, an AI model writes each draft
+comment from that video's caption, and each opening line from what the person actually said. Two
+providers are supported:
 
-1. In the Anthropic Console (platform.claude.com) make a **workspace** for this project, give it a low
-   monthly **spend limit**, and create an API key in it. This is billed to your Console account,
-   separately from any Claude.ai plan.
-2. In the extension's **Settings**, paste the key under **Anthropic API key** and choose **Save and
-   check**. It makes one tiny real request, so a wrong key or model shows up straight away.
+- **Grok (xAI), the default.** Get a key at console.x.ai and check there what your free quota covers.
+  Default model `grok-4.20-0309-non-reasoning`.
+- **Claude (Anthropic).** Get a key at platform.claude.com, in a workspace with a low monthly spend limit.
+  It is billed to your Anthropic account, separately from any Claude.ai plan. Default model `claude-haiku-5-5`.
 
-It uses `claude-haiku-5-5` by default (change it in Settings), at low effort. Each run sends one
-request for all its comments and one for all its opening lines. That is a fraction of a cent per run.
-Only public captions and comment text are sent to Anthropic.
+In the extension's **Settings**, choose the provider, paste the key and choose **Save and check**. It
+makes one tiny real request, so a wrong key, model or an empty quota shows up straight away. The model
+box can stay empty to use the default.
 
-Claude's text is checked against the same rules as the templates: no app or brand names, no links, a
-sensible length. Anything that fails the check, or any error (wrong key, spend limit reached, no
-internet), quietly falls back to the built-in text, and the popup's log says why. A run never fails
-because of Claude. The key stays in your Chrome and is only sent to Anthropic.
+Each run sends one request for all its comments and one for all its opening lines. Only public captions
+and comment text are sent. The key stays in your Chrome and is only sent to that provider.
+
+The model's text is checked against the same rules as the templates: no app or brand names, no links,
+a sensible length. Anything that fails the check, or any error (wrong key, quota or spend limit
+reached, no internet), quietly falls back to the built-in text, and the popup's log says why. A run
+never fails because of the AI.
 
 ## What gets published
 
@@ -106,7 +109,7 @@ Use one or the other, not both. Add `--no-publish` to keep results on your compu
 
 ## Tests
 
-    npm run test:extension                          # rules, GitHub saving, Claude suggestions and run logic
+    npm run test:extension                          # rules, GitHub saving, AI suggestions and run logic
     .venv/bin/python extension/test/pages_test.py   # page readers against mock TikTok pages
     .venv/bin/python extension/test/extension_e2e.py  # loads the extension in Chromium, mocks TikTok and GitHub (~2 min)
 
@@ -116,8 +119,8 @@ touch real TikTok.
 ## Layout
 
 - `extension/` the Chrome extension (`lib/rules.js` filters, `lib/tasks.js` what a run does,
-  `lib/pages.js` what is read from TikTok pages, `lib/github.js` saving, `lib/claude.js` the optional
-  Claude suggestions)
+  `lib/pages.js` what is read from TikTok pages, `lib/github.js` saving, `lib/llm.js` the optional
+  AI suggestions)
 - `src/` the page, `.github/workflows/pages.yml` publishes it and the extension download
 - `jolt_outreach.py`, `scripts/py.mjs` the Python alternative
 

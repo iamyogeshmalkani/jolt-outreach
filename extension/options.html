@@ -35,19 +35,21 @@
     </section>
 
     <section>
-      <h2>Draft comments written by Claude (optional)</h2>
-      <label>Anthropic API key
-        <input id="anthropicKey" type="password" autocomplete="off" placeholder="sk-ant-…" />
+      <h2>Draft comments written by AI (optional)</h2>
+      <label>Provider
+        <select id="aiProvider">
+          <option value="xai">Grok (xAI)</option>
+          <option value="anthropic">Claude (Anthropic)</option>
+        </select>
       </label>
-      <label>Model
-        <input id="claudeModel" autocomplete="off" />
+      <label>API key
+        <input id="aiKey" type="password" autocomplete="off" />
       </label>
-      <label class="check"><input id="useClaude" type="checkbox" /> Use Claude for draft comments and opening lines</label>
-      <p class="hint">
-        Without a key, the built-in drafts are used. This is billed to your Anthropic Console account (platform.claude.com),
-        separately from any Claude.ai plan. Make the key in its own workspace with a low monthly spend limit, because it is
-        stored in this Chrome. Only public captions and comment text are sent to Anthropic.
-      </p>
+      <label>Model <span class="hint">(leave empty for the default)</span>
+        <input id="aiModel" autocomplete="off" />
+      </label>
+      <label class="check"><input id="useAi" type="checkbox" /> Use it for draft comments and opening lines</label>
+      <p class="hint" id="aiHint"></p>
     </section>
 
     <div class="row">

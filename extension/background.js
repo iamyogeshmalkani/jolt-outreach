@@ -4,7 +4,7 @@ import { publish, fetchKnown } from './lib/github.js'
 import { clickCard, closeVideo, readCommentsPage, readGuard, readOpenVideo, readSearchCards } from './lib/pages.js'
 import { DEFAULTS } from './lib/settings.js'
 import { Stop, findPeople, findVideos } from './lib/tasks.js'
-import { improve } from './lib/claude.js'
+import { improve } from './lib/llm.js'
 
 const store = chrome.storage.local
 const getSettings = async () => ({ ...DEFAULTS, ...((await store.get('settings')).settings || {}) })
@@ -100,8 +100,8 @@ async function run(task, manual, delayMs = 0) {
     const result = await (task === 'people' ? findPeople : findVideos)(browser, known, seen, log)
 
     const found = result.people.length + result.videos.length
-    if (found && s.anthropicKey && s.useClaude) {
-      await improve({ key: s.anthropicKey.trim(), model: s.claudeModel, ...(s.claudeApi ? { api: s.claudeApi } : {}) }, result, log) // `claudeApi` is only set by tests
+    if (found && s.aiKey && s.useAi) {
+      await improve({ provider: s.aiProvider, key: s.aiKey.trim(), model: s.aiModel, ...(s.aiApi ? { api: s.aiApi } : {}) }, result, log) // `aiApi` is only set by tests
     }
     if (found) await publish(cfg, result)
     await store.set({ seen: { urls: [...seen.urls].slice(-3000), handles: [...seen.handles].slice(-3000) } })

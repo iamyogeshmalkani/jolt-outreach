@@ -6,7 +6,8 @@ export const DEFAULTS = {
   startHour: 8,
   endHour: 22,
   skip: '',           // handles you have already contacted, separated by spaces or new lines
-  anthropicKey: '',   // optional: lets Claude write the draft comments and opening lines
-  claudeModel: 'claude-haiku-5-5',
-  useClaude: true,    // only matters once a key is set
+  aiProvider: 'xai',  // optional: 'xai' (Grok) or 'anthropic' (Claude) writes the draft comments and opening lines
+  aiKey: '',          // without a key, the built-in drafts are used
+  aiModel: '',        // empty means the provider's default
+  useAi: true,        // only matters once a key is set
 }

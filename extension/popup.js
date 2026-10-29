@@ -1,3 +1,4 @@
+import { PROVIDERS, modelOf } from './lib/llm.js'
 import { DEFAULTS } from './lib/settings.js'
 
 const $ = (id) => document.getElementById(id)
@@ -20,7 +21,9 @@ async function render() {
   $('error').textContent = status.error || ''
   $('resume').hidden = !s.paused
   $('enabled').checked = s.enabled
-  $('claude').textContent = s.anthropicKey && s.useClaude ? `Drafts are written by Claude (${s.claudeModel}).` : 'Drafts use the built-in templates.'
+  $('claude').textContent = s.aiKey && s.useAi
+    ? `Drafts are written by ${PROVIDERS[s.aiProvider]?.label ?? 'AI'} (${modelOf({ provider: s.aiProvider, model: s.aiModel })}).`
+    : 'Drafts use the built-in templates.'
   $('hours').textContent = `Runs between ${s.startHour}:00 and ${s.endHour}:00 while Chrome is open.`
   $('videos').disabled = $('people').disabled = Boolean(status.running)
   $('log').textContent = log.join('\n') || 'Nothing yet.'
