@@ -40,6 +40,26 @@ The token stays in your Chrome and is only ever sent to GitHub. It can only touc
 - If a publish fails (no internet, or the token expired) it says so in the popup. Nothing is queued
   to retry: the next run finds new things.
 
+## Optional: draft comments and opening lines written by Claude
+
+Without this, drafts come from a few built-in templates. With an Anthropic API key, Claude writes each
+draft comment from that video's caption, and each opening line from what the person actually said.
+
+1. In the Anthropic Console (platform.claude.com) make a **workspace** for this project, give it a low
+   monthly **spend limit**, and create an API key in it. This is billed to your Console account,
+   separately from any Claude.ai plan.
+2. In the extension's **Settings**, paste the key under **Anthropic API key** and choose **Save and
+   check**. It makes one tiny real request, so a wrong key or model shows up straight away.
+
+It uses `claude-haiku-5-5` by default (change it in Settings), at low effort. Each run sends one
+request for all its comments and one for all its opening lines. That is a fraction of a cent per run.
+Only public captions and comment text are sent to Anthropic.
+
+Claude's text is checked against the same rules as the templates: no app or brand names, no links, a
+sensible length. Anything that fails the check, or any error (wrong key, spend limit reached, no
+internet), quietly falls back to the built-in text, and the popup's log says why. A run never fails
+because of Claude. The key stays in your Chrome and is only sent to Anthropic.
+
 ## What gets published
 
 The live page and the `data` branch are public. The `data` branch holds the TikTok handles and
@@ -86,7 +106,7 @@ Use one or the other, not both. Add `--no-publish` to keep results on your compu
 
 ## Tests
 
-    npm run test:extension                          # rules, GitHub saving and run logic
+    npm run test:extension                          # rules, GitHub saving, Claude suggestions and run logic
     .venv/bin/python extension/test/pages_test.py   # page readers against mock TikTok pages
     .venv/bin/python extension/test/extension_e2e.py  # loads the extension in Chromium, mocks TikTok and GitHub (~2 min)
 
@@ -96,7 +116,8 @@ touch real TikTok.
 ## Layout
 
 - `extension/` the Chrome extension (`lib/rules.js` filters, `lib/tasks.js` what a run does,
-  `lib/pages.js` what is read from TikTok pages, `lib/github.js` saving)
+  `lib/pages.js` what is read from TikTok pages, `lib/github.js` saving, `lib/claude.js` the optional
+  Claude suggestions)
 - `src/` the page, `.github/workflows/pages.yml` publishes it and the extension download
 - `jolt_outreach.py`, `scripts/py.mjs` the Python alternative
 

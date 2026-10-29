@@ -6,4 +6,7 @@ export const DEFAULTS = {
   startHour: 8,
   endHour: 22,
   skip: '',           // handles you have already contacted, separated by spaces or new lines
+  anthropicKey: '',   // optional: lets Claude write the draft comments and opening lines
+  claudeModel: 'claude-haiku-5-5',
+  useClaude: true,    // only matters once a key is set
 }

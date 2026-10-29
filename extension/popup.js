@@ -20,6 +20,7 @@ async function render() {
   $('error').textContent = status.error || ''
   $('resume').hidden = !s.paused
   $('enabled').checked = s.enabled
+  $('claude').textContent = s.anthropicKey && s.useClaude ? `Drafts are written by Claude (${s.claudeModel}).` : 'Drafts use the built-in templates.'
   $('hours').textContent = `Runs between ${s.startHour}:00 and ${s.endHour}:00 while Chrome is open.`
   $('videos').disabled = $('people').disabled = Boolean(status.running)
   $('log').textContent = log.join('\n') || 'Nothing yet.'
