@@ -51,7 +51,7 @@ export default function Conversation(p: Props) {
             <h2>Nothing to show yet</h2>
             <p>
               {p.online
-                ? <>Run <code>{script}</code> on your computer. It publishes here, and this page updates within about 5 minutes.</>
+                ? <>The Jolt finder extension in Chrome publishes here, and this page updates within about 5 minutes.</>
                 : <>Run <code>{script}</code>, then reload this page.</>}
             </p>
           </>

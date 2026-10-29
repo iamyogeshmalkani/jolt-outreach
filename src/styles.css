@@ -171,3 +171,5 @@ code { font-size: 0.9em; background: rgb(27 36 48 / 0.08); padding: 1px 5px; bor
 }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+.banner a { color: var(--amber); font-weight: 600; }

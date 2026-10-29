@@ -6,53 +6,39 @@ yourself.
 
 **Live page:** https://iamyogeshmalkani.github.io/jolt-outreach/
 
-It has two parts:
+It has two parts, and nothing to run in a terminal:
 
-- **The finder** (`jolt_outreach.py`) runs **on your own computer**, in your own Chrome with your own
-  TikTok login. It only reads TikTok. After each run it publishes what it found to the `data`
-  branch of this repo.
+- **The Jolt finder** is a Chrome extension. It runs in your own Chrome, where you are already
+  logged into TikTok, and only reads pages: it opens a small TikTok window, looks at search results
+  and comments, and saves what it finds to the `data` branch of this repo.
 - **The page** is hosted on GitHub. It reads the `data` branch and shows one conversation at a
   time, with a copy button and a suggested next step. Statuses (sent, replied, booked) are saved in
   your own browser.
 
-Running the finder at home, not on GitHub's servers, is on purpose: TikTok is far more likely to
-block a data-centre address than your normal connection.
+## Set up the extension (once, about 3 minutes)
 
-## Set up the finder (once)
+1. **Get it.** Download https://iamyogeshmalkani.github.io/jolt-outreach/jolt-finder-extension.zip and
+   unzip it. In Chrome open `chrome://extensions`, turn on **Developer mode**, choose **Load
+   unpacked** and pick the unzipped folder.
+2. **Log into TikTok** in that same Chrome. Use a spare account if you can.
+3. **Make a GitHub token** at https://github.com/settings/personal-access-tokens/new. Choose **Only
+   select repositories**, pick `jolt-outreach`, and under **Repository permissions** set
+   **Contents** to **Read and write**.
+4. Click the extension, open **Settings**, paste the token, and choose **Save and check**.
+5. Click the extension and choose **Find videos now** to try it.
 
-You need Python 3.9 or newer, Node 20 or newer, Chrome and `git` with access to this repo.
+After that it looks for videos every hour (8am to 10pm, setting changeable) and for people once a day
+(about 9:06am), while Chrome is open. A small Chrome window appears briefly during each run. Leave it
+alone. The page picks up new results within about 5 minutes.
 
-    git clone https://github.com/iamyogeshmalkani/jolt-outreach.git
-    cd jolt-outreach
-    npm install
-    npm run setup       # private Python environment
-    npm run selftest    # should end with "publish selftest ok"
-    npm run login       # a Chrome window opens: log into TikTok there (a spare account), then press Enter
+The token stays in your Chrome and is only ever sent to GitHub. It can only touch this one repo.
 
-The login is saved on your computer, in `~/jolt_outreach`. Nothing about it is uploaded.
-
-## Use it
-
-    npm run find        # about 20 people to message (5 to 10 minutes, leave the window alone)
-    npm run videos      # about 8 videos worth a comment
-    npm run watch       # keep looking every hour, 8am to 10pm, a few videos at a time
-
-Each run publishes to the live page, which picks it up within about 5 minutes. The computer must be
-on and awake for `watch`. A Chrome window opens briefly each hour. To start it automatically, run
-`npm run watch` from Task Scheduler (Windows, at log on) or a login item (Mac).
-
-Add `--no-publish` to keep results on your computer only, for example
-`node scripts/py.mjs --videos --no-publish`, then view them with `npm run dev`
-(a page on your computer that reads `~/jolt_outreach`, or the folder in `JOLT_OUT_DIR`).
-
-Run the finder on **one** computer. Two computers publishing would overwrite each other's lists.
-
-- It pauses by itself while 30 or more videos are waiting for a comment (only when you use the
-  local page, which is where it can see your statuses).
-- It stops, and says why, if TikTok asks you to log in or solve a check. Fix that in the window, then
-  start it again.
-- If a publish fails (no internet, or no git access to the repo), the results stay on your computer
-  and go out with the next successful run.
+- If TikTok shows a verification check or you are logged out, the run stops, says why, and the hourly
+  runs pause. Fix it in Chrome and choose **Resume hourly runs**.
+- Run the extension in **one** Chrome. It merges with what is already published, so a second one
+  would not lose data, but the two would not know about each other's recent finds.
+- If a publish fails (no internet, or the token expired) it says so in the popup. Nothing is queued
+  to retry: the next run finds new things.
 
 ## What gets published
 
@@ -67,16 +53,11 @@ are filtered out before anything is saved.
 - **People:** comments that describe the commenter's own experience (first person plus a
   screen-time word). Comments that name a specific app or experience are marked "Specific" and sorted first.
 - **Videos:** found through search phrases like "dopamine detox". Kept when the caption is on topic
-  and the video has at least 2 comments (`MIN_COMMENTS`). One video per creator.
+  and the video has at least 2 comments. One video per creator.
 - **Drafts:** comment drafts are questions, never a pitch, never a link, never a claim of personal
   experience. Edit each one so it sounds like you before you post it.
 
-## Make it yours
-
-Edit the settings at the top of `jolt_outreach.py`: `NAME`, `OFFER` and `BODY` (the main message),
-the search phrases in `QUERIES` and `VIDEO_QUERIES`, and the run sizes. On the page, **Message
-template** changes the name, offer and message for your browser. To skip people you have already
-contacted, list their handles in a file called `seen_seed.txt` inside `~/jolt_outreach`.
+The rules are in `extension/lib/rules.js`. The search phrases and run sizes are there too.
 
 ## Please read
 
@@ -85,22 +66,38 @@ contacted, list their handles in a file called `seen_seed.txt` inside `~/jolt_ou
   Don't send messages or comments with a tool.
 - **People are real.** Message each person individually, be honest about who you are and why you're
   asking, and drop anyone who says no. Don't contact anyone under 18.
-- **TikTok changes its pages.** If runs say they couldn't read a caption, the selectors near the
-  top of `jolt_outreach.py` need updating.
+- **TikTok changes its pages.** The extension reads captions and comments using TikTok's current page
+  markup. If the popup's log says it couldn't read a caption, the selectors in
+  `extension/lib/pages.js` need updating.
 
-## Optional: better opening lines
+## Alternative: run it from a terminal
 
-    .venv/bin/pip install anthropic     # on Windows: .venv\Scripts\pip install anthropic
-    export ANTHROPIC_API_KEY=...        # on Windows: set ANTHROPIC_API_KEY=...
+`jolt_outreach.py` does the same job in Python, with its own Chrome profile, and publishes to the same
+`data` branch. You need Python 3.9+, Node 20+ and `git` access to this repo.
 
-One small model call per run then writes the opening lines and comment drafts. Without a key,
-built-in templates are used and nothing is sent anywhere.
+    npm install && npm run setup
+    npm run login       # log into TikTok in the window that opens
+    npm run find        # about 20 people to message
+    npm run videos      # about 8 videos worth a comment
+    npm run watch       # keep looking every hour
+    npm run dev         # the page on your computer, reading ~/jolt_outreach
+
+Use one or the other, not both. Add `--no-publish` to keep results on your computer only.
+
+## Tests
+
+    npm run test:extension                          # rules, GitHub saving and run logic
+    .venv/bin/python extension/test/pages_test.py   # page readers against mock TikTok pages
+    .venv/bin/python extension/test/extension_e2e.py  # loads the extension in Chromium, mocks TikTok and GitHub (~2 min)
+
+The end-to-end test needs `.venv/bin/python -m playwright install chromium` once. None of the tests
+touch real TikTok.
 
 ## Layout
 
-- `jolt_outreach.py` the finder, run through `npm run find`, `videos`, `watch` and `login`
-- `scripts/py.mjs` runs the finder with its own Python environment on Mac, Linux and Windows
-- `src/` the page, `server/dataApi.ts` the local service used only by `npm run dev`
-- `.github/workflows/pages.yml` publishes the page when the code changes
+- `extension/` the Chrome extension (`lib/rules.js` filters, `lib/tasks.js` what a run does,
+  `lib/pages.js` what is read from TikTok pages, `lib/github.js` saving)
+- `src/` the page, `.github/workflows/pages.yml` publishes it and the extension download
+- `jolt_outreach.py`, `scripts/py.mjs` the Python alternative
 
 Shortcuts on the page: `J` and `K` move through the list, `C` copies the reply.

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Jolt finder settings</title>
+    <link rel="stylesheet" href="ui.css" />
+  </head>
+  <body class="options">
+    <h1><i class="mark"></i>Jolt finder settings</h1>
+
+    <section>
+      <h2>Where results go</h2>
+      <label>GitHub repo
+        <input id="repo" placeholder="owner/name" autocomplete="off" />
+      </label>
+      <label>GitHub token
+        <input id="token" type="password" autocomplete="off" placeholder="github_pat_…" />
+      </label>
+      <p class="hint">
+        Make one at <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">GitHub, Fine-grained tokens</a>:
+        pick <b>Only select repositories</b> and choose this repo, then under <b>Repository permissions</b> set
+        <b>Contents</b> to <b>Read and write</b>. It stays in this Chrome and is only ever sent to GitHub.
+      </p>
+    </section>
+
+    <section>
+      <h2>When it runs</h2>
+      <div class="row">
+        <label>From hour <input id="startHour" type="number" min="0" max="23" /></label>
+        <label>Until hour <input id="endHour" type="number" min="1" max="24" /></label>
+      </div>
+      <label>People to skip (handles you already contacted)
+        <textarea id="skip" rows="4" placeholder="one handle per line, or separated by spaces"></textarea>
+      </label>
+    </section>
+
+    <div class="row">
+      <button id="save" class="primary">Save and check</button>
+      <span id="msg" role="status"></span>
+    </div>
+    <script type="module" src="options.js"></script>
+  </body>
+</html>

@@ -12,7 +12,8 @@
     "watch": "node scripts/py.mjs --videos --every 60",
     "selftest": "node scripts/py.mjs --selftest",
     "build": "tsc --noEmit && vite build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:extension": "node --test \"extension/test/*.test.mjs\""
   },
   "dependencies": {
     "@fontsource-variable/hanken-grotesk": "^5.3.0",

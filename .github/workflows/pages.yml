@@ -28,6 +28,8 @@ jobs:
         env:
           VITE_BASE: /${{ github.event.repository.name }}/
           VITE_DATA_BASE: https://raw.githubusercontent.com/${{ github.repository }}/data/
+      - name: Add the Chrome extension download
+        run: cd extension && zip -qr ../dist/jolt-finder-extension.zip . -x 'test/*' -x '*.DS_Store'
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
