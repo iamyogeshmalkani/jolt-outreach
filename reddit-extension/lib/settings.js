@@ -16,6 +16,9 @@ export const DEFAULTS = {
     "what to build next, I'm talking to people about their real phone habits. " +
     "Up for a 20-min chat? As a thanks, you'd get {OFFER}.",
   subject: 'Quick question about your comment in r/{SUB}',
+  syncRepo: '',        // a PRIVATE GitHub repo, "owner/name", used to keep your devices in step (this device only)
+  syncToken: '',       // a GitHub token with Contents: Read and write on that repo (this device only)
+  settingsAt: 0,       // when the synced settings were last changed, so the newest copy wins
 }
 
 export const fill = (text, s, extra = {}) =>

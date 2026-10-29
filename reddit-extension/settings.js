@@ -2,9 +2,10 @@ import { PROVIDERS, check, providerOf } from './lib/ai.js'
 import { getJson, RedditError } from './lib/reddit.js'
 import { parseSubs } from './lib/rules.js'
 import { DEFAULTS, normalize } from './lib/settings.js'
+import { checkSync, syncFromSettings, syncNow } from './lib/sync.js'
 
 const $ = (id) => document.getElementById(id)
-const FIELDS = ['subs', 'period', 'postsPerSub', 'minComments', 'minScore', 'skip', 'provider', 'aiKey', 'model', 'name', 'offer', 'body', 'subject']
+const FIELDS = ['subs', 'period', 'postsPerSub', 'minComments', 'minScore', 'skip', 'provider', 'aiKey', 'model', 'name', 'offer', 'body', 'subject', 'syncRepo', 'syncToken']
 const say = (id, text, bad = false) => {
   $(id).textContent = text
   $(id).className = bad ? 'bad' : ''
@@ -39,15 +40,38 @@ function read(current) {
     offer: $('offer').value,
     body: $('body').value,
     subject: $('subject').value,
+    syncRepo: $('syncRepo').value.trim(),
+    syncToken: $('syncToken').value.trim(),
   }
 }
 
 $('save').onclick = async () => {
-  const next = read(await stored())
+  const next = { ...read(await stored()), settingsAt: Date.now() } // the newest saved settings win on every device
   await chrome.storage.local.set({ settings: next })
   const n = parseSubs(next.subs).length
   if (!n) return say('msg', 'Saved. Add at least one subreddit to start.', true)
   say('msg', `Saved. Looking in ${n} subreddit${n === 1 ? '' : 's'}.`)
+  if (next.syncRepo && next.syncToken) {
+    await syncFromSettings(chrome.storage.local, next) // share the new settings with the other devices
+    const { syncStatus } = await chrome.storage.local.get('syncStatus')
+    if (syncStatus?.error) say('msg', `Saved here, but sync failed: ${syncStatus.error}`, true)
+  }
+}
+
+$('testSync').onclick = async () => {
+  const s = read(await stored())
+  if (!s.syncRepo || !s.syncToken) return say('syncMsg', 'Fill in the repo and the token first.', true)
+  if (!/^[\w.-]+\/[\w.-]+$/.test(s.syncRepo)) return say('syncMsg', 'The repo should look like owner/name.', true)
+  say('syncMsg', 'Checking…')
+  try {
+    const cfg = { repo: s.syncRepo, token: s.syncToken, ...(s.syncApi ? { api: s.syncApi } : {}) }
+    const name = await checkSync(cfg) // refuses a public repo
+    const r = await syncNow(chrome.storage.local, cfg)
+    await chrome.storage.local.set({ syncStatus: { at: Date.now(), error: '' } })
+    say('syncMsg', `Sync works with ${name} (private). ${r.items} post${r.items === 1 ? '' : 's'} shared.`)
+  } catch (e) {
+    say('syncMsg', e.message, true)
+  }
 }
 
 $('testReddit').onclick = async () => {

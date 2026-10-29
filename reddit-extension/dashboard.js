@@ -1,4 +1,5 @@
 import { DEFAULTS, fill, normalize } from './lib/settings.js'
+import { syncFromSettings } from './lib/sync.js'
 
 const STATUSES = ['To send', 'Sent', 'Replied', 'Booked', 'Skip']
 // A post stays in "To do" until both the message and the reply have been dealt with. A post with no suitable commenter only needs the reply.
@@ -35,14 +36,49 @@ async function load() {
   render()
 }
 
+// The message part and the reply part of a post are stamped separately, so two devices changing different parts of one post both keep their change.
+const DM_FIELDS = ['dmStatus', 'dmEdit']
+const COMMENT_FIELDS = ['commentStatus', 'commentEdit']
+
 async function patch(id, fields) {
   const { items = [] } = await chrome.storage.local.get('items')
   const at = items.findIndex((x) => x.id === id)
   if (at < 0) return
+  const now = Date.now()
+  if (DM_FIELDS.some((k) => k in fields)) fields = { ...fields, dmAt: now }
+  if (COMMENT_FIELDS.some((k) => k in fields)) fields = { ...fields, commentAt: now }
   items[at] = { ...items[at], ...fields }
   mute = Date.now() + 500
   await chrome.storage.local.set({ items })
   state.items = items
+  scheduleSync()
+}
+
+// ---- keeping other devices in step ----
+let syncTimer = 0
+let syncing = false
+let lastSync = 0
+const syncConfigured = () => Boolean(state.settings.syncRepo && state.settings.syncToken)
+const scheduleSync = () => {
+  clearTimeout(syncTimer)
+  syncTimer = setTimeout(doSync, 2500) // a moment after the last change, not on every keystroke
+}
+
+async function showSyncState() {
+  const el = $('syncstate')
+  $('sync').hidden = !syncConfigured()
+  if (!syncConfigured()) { el.textContent = ''; return }
+  const { syncStatus } = await chrome.storage.local.get('syncStatus')
+  el.className = syncStatus?.error ? 'bad' : 'hint'
+  el.textContent = syncing ? 'Syncing…' : syncStatus?.error ? `Sync failed: ${syncStatus.error}` : syncStatus ? 'Synced.' : ''
+}
+
+async function doSync() {
+  if (syncing || !syncConfigured()) return
+  syncing = true
+  showSyncState()
+  try { await syncFromSettings(chrome.storage.local, state.settings) } finally { syncing = false; lastSync = Date.now() }
+  showSyncState()
 }
 
 const viewOf = (it) => VIEWS.findIndex((v) => v.has(it))
@@ -67,6 +103,7 @@ function render() {
   const s = state.status
   $('runstate').textContent = s.running ? 'Looking through your subreddits…' : s.error ? '' : s.message || ''
   $('find').disabled = Boolean(s.running)
+  showSyncState()
   renderDetail(state.items.find((i) => i.id === state.selected))
 }
 
@@ -160,7 +197,16 @@ document.addEventListener('input', (e) => {
   const it = state.items.find((i) => i.id === state.selected)
   if (kind && it) patch(it.id, kind === 'dm' ? { dmEdit: e.target.value } : { commentEdit: e.target.value })
 })
+$('sync').onclick = doSync
+window.addEventListener('focus', () => { if (Date.now() - lastSync > 30_000) doSync() })
 $('subfilter').addEventListener('change', (e) => { state.sub = e.target.value; render() })
 $('settings').onclick = (e) => { e.preventDefault(); chrome.runtime.openOptionsPage() }
-chrome.storage.onChanged.addListener(() => { if (Date.now() > mute) load() })
-load()
+// Do not redraw the page under someone who is typing; catch up when they click away.
+let behind = false
+document.addEventListener('focusout', () => { if (behind) { behind = false; load() } })
+chrome.storage.onChanged.addListener(() => {
+  if (Date.now() <= mute) return
+  if (document.activeElement?.tagName === 'TEXTAREA') behind = true
+  else load()
+})
+load().then(doSync)

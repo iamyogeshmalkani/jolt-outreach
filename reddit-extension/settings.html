@@ -63,6 +63,23 @@
       <div class="row"><button id="testAi" class="secondary">Test AI</button><span id="aiMsg" role="status"></span></div>
     </section>
 
+    <section>
+      <h2>Use it on more than one device (optional)</h2>
+      <p class="hint">
+        Your posts, statuses, edits and settings are kept in a <b>private</b> GitHub repo, so every device (and teammate with access) sees
+        the same list. Make a new private repo, then make a token at github.com/settings/personal-access-tokens/new: choose
+        <b>Only select repositories</b>, pick that repo, and set <b>Contents</b> to <b>Read and write</b>. Do the same on each device.
+        Your AI key and this token stay on each device and are never synced.
+      </p>
+      <label>Private sync repo
+        <input id="syncRepo" placeholder="owner/name" autocomplete="off" />
+      </label>
+      <label>Sync token
+        <input id="syncToken" type="password" autocomplete="off" />
+      </label>
+      <div class="row"><button id="testSync" class="secondary">Test sync</button><span id="syncMsg" role="status"></span></div>
+    </section>
+
     <div class="row">
       <button id="save" class="primary">Save</button>
       <span id="msg" role="status"></span>

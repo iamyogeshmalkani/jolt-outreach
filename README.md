@@ -81,6 +81,29 @@ In the dashboard, each post shows its top commenter and their comment, a message
 button opens Reddit's message form already filled in), and a reply draft. Everything stays in this Chrome.
 Nothing is uploaded to GitHub.
 
+### Using it on more than one device
+
+By default everything stays in one Chrome. To share it across devices (and teammates), the extension can
+keep your posts, statuses, edits and settings in a **private** GitHub repo:
+
+1. Make a **private** repo (for example `jolt-reddit-data`). It holds other people's usernames and what
+   they wrote, so keep it private. The extension refuses a public repo.
+2. Make a token at https://github.com/settings/personal-access-tokens/new: **Only select repositories**, pick
+   that repo, and set **Contents** to **Read and write**. (This is a different token from the TikTok
+   extension's, which is limited to a different repo.)
+3. On each device, open **Settings**, fill in **Private sync repo** and **Sync token**, then choose **Test sync**.
+   Teammates need access to the repo and their own token.
+
+After that it syncs by itself: before and after each run, a moment after you change anything in the
+dashboard, when you come back to the dashboard tab, and with **Sync now**.
+
+- **Changes are merged, not overwritten.** If one device marks the message as sent while another marks the
+  reply as posted, both changes survive. If two devices change the same part, the newest change wins.
+- **Posts found on one device are not found again on another**, because each run syncs first.
+- **Keys never sync.** Your AI key and sync token stay on each device. Settings such as subreddits and the
+  message template do sync, and the most recently saved version wins.
+- **It keeps the newest 250 posts.** Older ones drop off, on every device.
+
 - **The top commenter** is the highest-scoring top-level comment from a real person. It skips the poster,
   moderators, bots, deleted comments, links, anyone who looks under 18, and sensitive topics. Posts that
   are pinned, adult, locked or about sensitive subjects are skipped too.

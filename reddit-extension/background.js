@@ -4,6 +4,7 @@ import { find } from './lib/finder.js'
 import { draft } from './lib/ai.js'
 import { reddit } from './lib/reddit.js'
 import { parseSubs } from './lib/rules.js'
+import { MAX_ITEMS, syncFromSettings } from './lib/sync.js'
 import { normalize } from './lib/settings.js'
 
 const store = chrome.storage.local
@@ -35,6 +36,8 @@ async function run() {
     }
     await patchStatus({ running: true, error: '', message: '' })
     await log(`Started: ${parseSubs(s.subs).map((x) => 'r/' + x).join(', ')}`)
+    // Pull first, so posts and people another device already found are not found again.
+    if (await syncFromSettings(store, s)) await log('Synced with your other devices.')
 
     const { items: existing = [], seen = {} } = await store.get(['items', 'seen'])
     const known = {
@@ -50,12 +53,16 @@ async function run() {
     const { items: current = [] } = await store.get('items')
     const ids = new Set(items.map((i) => i.id))
     await store.set({
-      items: [...items, ...current.filter((i) => !ids.has(i.id))].slice(0, 500),
+      items: [...items, ...current.filter((i) => !ids.has(i.id))].slice(0, MAX_ITEMS),
       seen: {
         posts: [...known.posts, ...ids].slice(-3000),
         authors: [...known.authors, ...items.filter((i) => i.top).map((i) => i.top.author.toLowerCase())].slice(-3000),
       },
     })
+
+    if (await syncFromSettings(store, s)) await log('Shared the new posts with your other devices.')
+    const syncFailed = (await store.get('syncStatus')).syncStatus?.error
+    if (syncFailed) await log(`Sync failed: ${syncFailed}`)
 
     const found = items.length
     if (stopped) await patchStatus({ error: stopped, message: found ? `Saved ${found} posts before stopping.` : '' })

@@ -91,6 +91,9 @@ export function makeItem(post, top, flags, today = new Date().toISOString().slic
     opener: top ? `Saw your comment on r/${post.subreddit} about “${snippet(top.body, 60)}”.` : '',
     dmStatus: 'To send',
     commentStatus: 'To post',
+    dmAt: 0, // when the message part and the reply part were last changed: syncing keeps the newest of each
+    commentAt: 0,
+    foundAt: Date.now(),
     added: today,
   }
 }

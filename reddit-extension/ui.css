@@ -31,7 +31,7 @@ details { margin: 8px 0; } summary { cursor: pointer; color: var(--mute); }
 pre { max-height: 180px; overflow: auto; margin: 8px 0 0; padding: 8px; background: #eef0f2; border-radius: 8px; font-size: 12px; white-space: pre-wrap; }
 a { color: var(--ink); font-weight: 600; text-underline-offset: 3px; }
 .links { margin: 8px 0 0; }
-#msg, #redditMsg, #grokMsg { font-size: 13px; } .bad { color: #b3261e; }
+#msg, #redditMsg, #aiMsg, #syncMsg { font-size: 13px; } .bad { color: #b3261e; }
 :focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 
 /* dashboard */
@@ -63,3 +63,4 @@ a { color: var(--ink); font-weight: 600; text-underline-offset: 3px; }
 .pill { font-size: 12px; font-weight: 600; background: var(--lime); border-radius: 99px; padding: 0 9px; }
 .done { color: #2f6b00; font-weight: 600; }
 @media (max-width: 860px) { .app { grid-template-columns: 1fr; } .queue { max-height: 40vh; border-right: 0; border-bottom: 1px solid var(--line); } }
+[hidden] { display: none !important; }

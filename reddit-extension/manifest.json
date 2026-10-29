@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Jolt Reddit finder",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Finds the top posts in the subreddits you choose and their top commenter, and drafts a message and a reply with AI. You send everything yourself.",
   "permissions": [
     "storage"
@@ -9,7 +9,8 @@
   "host_permissions": [
     "https://www.reddit.com/*",
     "https://api.groq.com/*",
-    "https://api.x.ai/*"
+    "https://api.x.ai/*",
+    "https://api.github.com/*"
   ],
   "background": {
     "service_worker": "background.js",

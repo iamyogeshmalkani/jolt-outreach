@@ -59,8 +59,8 @@ class Fake(BaseHTTPRequestHandler):
         if origin:  # credentialed requests need the exact origin, not *
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Access-Control-Allow-Credentials", "true")
-        self.send_header("Access-Control-Allow-Headers", "authorization,content-type,accept")
-        self.send_header("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "authorization,content-type,accept,x-github-api-version")
+        self.send_header("Access-Control-Allow-Methods", "GET,POST,PUT,OPTIONS")
         self.send_header("Content-Type", ctype)
         self.end_headers()
         if obj is not None:
