@@ -1,0 +1,12 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+# Output the finder writes (people, comments, browser profile). Never commit these.
+jolt_outreach/
+ui_state.json
+people.json
+videos.json
+seen*.json
+seen_seed.txt
+chrome-profile/
