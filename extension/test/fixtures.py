@@ -6,6 +6,7 @@ CAPTIONS = {
     1: "Why I can't stop doomscrolling #dopamine detox",
     2: "my dopamine detox: day 7",
     3: "cooking pasta tonight #dinner",
+    4: "",  # a video with no caption at all
 }
 
 
@@ -32,7 +33,7 @@ def search_html(captions=CAPTIONS, comment_count="40", open_delay_ms=600):
       const m = document.createElement('div')
       m.id = 'modal'
       m.innerHTML = `<button data-e2e="browse-close"></button>
-        <div data-e2e="browse-video-desc">${{caption(a)}}</div>
+        ${{caption(a) ? '<div data-e2e="browse-video-desc">' + caption(a) + '</div>' : ''}}
         <strong data-e2e="browse-like-count">9K</strong><strong data-e2e="browse-comment-count">{comment_count}</strong>
         <div id="panel" style="height:200px;overflow:auto"></div>`
       document.body.appendChild(m)

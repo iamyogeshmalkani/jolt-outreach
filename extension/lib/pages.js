@@ -51,7 +51,8 @@ export function clickCard(videoPath) {
   return true
 }
 
-// Waits for the opened video and reads its caption and counts. Lists what is on the page if the caption never shows up.
+// Waits for the opened video and reads its caption and counts. A video can have no caption, so `opened` says
+// whether the video panel is showing at all. If it is not, `markers` lists the page's elements to help find out why.
 export async function readOpenVideo() {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
   const pick = (sels) => {
@@ -62,16 +63,28 @@ export async function readOpenVideo() {
     }
     return ''
   }
-  const captionSelectors = ['[data-e2e="browse-video-desc"]', '[data-e2e="video-desc"]']
+  const isOpen = () => Boolean(document.querySelector(
+    '[data-e2e="browse-close"], [data-e2e="browse-like-count"], [data-e2e="browse-comment-count"], [data-e2e="browse-video-desc"]'))
   let caption = ''
-  for (let i = 0; i < 24 && !caption; i++) {
-    caption = pick(captionSelectors)
-    if (!caption) await sleep(500)
+  let openedAt = -1
+  for (let i = 0; i < 24; i++) {
+    caption = pick(['[data-e2e="browse-video-desc"]', '[data-e2e="video-desc"]'])
+    if (caption) break
+    if (isOpen()) {
+      if (openedAt < 0) openedAt = i
+      if (i - openedAt >= 4) break // open for two seconds and still no caption: this video has none
+    }
+    await sleep(500)
   }
-  const markers = caption
+  const opened = isOpen()
+  const noise = /^(nav-|inbox|following-|tiktok-logo|search-box|search-user|upload-icon|profile-icon|copyright|right-click|all$|likes$|comments$|mentions$|followers$|follow-back$)/
+  const markers = opened
     ? []
-    : [...new Set([...document.querySelectorAll('[data-e2e]')].map((e) => e.getAttribute('data-e2e')))].filter(Boolean).slice(0, 25)
+    : [...new Set([...document.querySelectorAll('[data-e2e]')].map((e) => e.getAttribute('data-e2e')))]
+        .filter((n) => n && !noise.test(n))
+        .slice(0, 30)
   return {
+    opened,
     caption,
     likes: pick(['[data-e2e="browse-like-count"]', '[data-e2e="like-count"]']),
     comments: pick(['[data-e2e="browse-comment-count"]', '[data-e2e="comment-count"]']),
@@ -83,7 +96,8 @@ export async function readOpenVideo() {
 // Closes the opened video so the next result can be clicked.
 export async function closeVideo() {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-  const gone = () => !document.querySelector('[data-e2e="browse-video-desc"]')
+  const gone = () => !document.querySelector(
+    '[data-e2e="browse-close"], [data-e2e="browse-like-count"], [data-e2e="browse-video-desc"]')
   const button = document.querySelector('[data-e2e="browse-close"]')
   if (button) button.click()
   for (let i = 0; i < 8 && !gone(); i++) await sleep(500)

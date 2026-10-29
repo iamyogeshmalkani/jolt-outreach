@@ -20,7 +20,7 @@ function fakeBrowser({ cards, videos = {}, comments = {}, stopOnOpen }) {
       calls.push(['open', u])
       last = u
       if (++opens === stopOnOpen) throw new Stop('verification')
-      return videos[u] ?? { caption: 'my dopamine detox', likes: '1K', comments: '40', markers: [] }
+      return videos[u] ?? { opened: true, caption: 'my dopamine detox', likes: '1K', comments: '40', markers: [] }
     },
     closeVideo: async () => { calls.push(['close']) },
     comments: async () => comments[last] ?? { ok: false, rows: [] },
@@ -44,20 +44,33 @@ test('queues up to two fitting videos, one per creator, skipping known and off-t
 
 test('does not keep videos with too few comments', async () => {
   const cards = [card(1), card(2)]
-  const videos = Object.fromEntries(cards.map((c) => [c.url, { caption: 'my dopamine detox', comments: '1', likes: '1', markers: [] }]))
+  const videos = Object.fromEntries(cards.map((c) => [c.url, { opened: true, caption: 'my dopamine detox', comments: '1', likes: '1', markers: [] }]))
   const out = await findVideos(fakeBrowser({ cards, videos }), empty(), seen())
   assert.equal(out.videos.length, 0)
 })
 
-test('says what is on the page when a caption cannot be read, then moves on', async () => {
+test('says what is on the page when a video does not open, then moves on', async () => {
   const cards = [card(1), card(2)]
-  const videos = { [cards[0].url]: { caption: '', markers: ['something-new', 'browse-music'] } }
+  const videos = { [cards[0].url]: { opened: false, caption: '', markers: ['something-new', 'browse-music'] } }
   const lines = []
   const b = fakeBrowser({ cards, videos })
   const out = await findVideos(b, empty(), seen(), async (l) => lines.push(l))
-  assert.ok(lines.some((l) => /could not read the caption/.test(l) && /something-new, browse-music/.test(l)), lines.join('\n'))
+  assert.ok(lines.some((l) => /did not open/.test(l) && /something-new, browse-music/.test(l)), lines.join('\n'))
   assert.ok(out.videos.length <= 2)
   assert.equal(b.calls.filter(([k]) => k === 'close').length, opened(b).length)
+})
+
+test('skips a video with no caption but still reads comments from it when looking for people', async () => {
+  const cards = [card(1, ''), card(2, '')]
+  const info = { opened: true, caption: '', likes: '1', comments: '40', markers: [] }
+  const videos = Object.fromEntries(cards.map((c) => [c.url, info]))
+  const lines = []
+  const v = await findVideos(fakeBrowser({ cards, videos }), empty(), seen(), async (l) => lines.push(l))
+  assert.equal(v.videos.length, 0)
+  assert.ok(lines.some((l) => /no caption, skipped/.test(l)))
+  const comments = Object.fromEntries(cards.map((c) => [c.url, { ok: true, rows: [{ handle: 'quitter1', text: 'Quit again for a couple days but unfortunately came back to it.' }] }]))
+  const p = await findPeople(fakeBrowser({ cards, videos, comments }), empty(), seen())
+  assert.deepEqual([...new Set(p.people.map((x) => x.handle))], ['quitter1'])
 })
 
 test('stops cleanly on a verification check and keeps what it already found', async () => {

@@ -1,7 +1,7 @@
 // What each kind of run does, written against a small `browser` object so it can be tested without Chrome.
 // background.js supplies the real one:
 //   search(query) -> [{ url, caption, views, creator }]   the video results on the search page
-//   openVideo(url) -> { caption, likes, comments, markers }  opens one result over the search page
+//   openVideo(url) -> { opened, caption, likes, comments, markers }  opens one result over the search page
 //   comments() -> { ok, rows }                              the comments of the opened video
 //   closeVideo()                                            back to the results
 //   pause(a, b)                                             a short, random wait
@@ -14,9 +14,9 @@ export class Stop extends Error {}
 
 const creatorOf = (url) => (/\/@([^/]+)\/video/.exec(url) || [])[1] || ''
 
-async function noCaption(browser, creator, info, log) {
+async function notOpened(browser, creator, info, log) {
   const seen = info?.markers?.length ? ` The page had: ${info.markers.join(', ')}.` : ''
-  await log(`@${creator}: could not read the caption.${seen}`)
+  await log(`@${creator}: the video did not open.${seen}`)
   await browser.closeVideo()
 }
 
@@ -39,8 +39,13 @@ export async function findVideos(browser, known, seen, log = async () => {}) {
         const info = await browser.openVideo(card.url)
         opened++
         seen.urls.add(card.url)
-        if (!info?.caption) {
-          await noCaption(browser, creator, info, log)
+        if (!info?.opened) {
+          await notOpened(browser, creator, info, log)
+          continue
+        }
+        if (!info.caption) {
+          await log(`@${creator}: no caption, skipped`)
+          await browser.closeVideo()
           continue
         }
         if (isVideoCandidate(info.caption, parseCount(info.comments))) {
@@ -80,9 +85,9 @@ export async function findPeople(browser, known, seen, log = async () => {}) {
         const creator = creatorOf(card.url)
         const info = await browser.openVideo(card.url)
         here++
-        if (!info?.caption) {
+        if (!info?.opened) {
           fails++
-          await noCaption(browser, creator, info, log)
+          await notOpened(browser, creator, info, log)
           continue
         }
         const page = await browser.comments()

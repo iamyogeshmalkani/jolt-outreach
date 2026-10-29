@@ -35,7 +35,7 @@ def main():
         # search results: each card paired with its own caption and creator
         page.set_content(search_html())
         cards = page.evaluate(fn("readSearchCards"))
-        assert [c["url"] for c in cards] == [f"https://www.tiktok.com/@maker{i}/video/{i}" for i in (1, 2, 3)], cards
+        assert [c["url"] for c in cards] == [f"https://www.tiktok.com/@maker{i}/video/{i}" for i in (1, 2, 3, 4)], cards
         assert cards[0]["caption"] == "Why I can't stop doomscrolling #dopamine detox", cards[0]
         assert cards[2]["caption"] == "cooking pasta tonight #dinner" and cards[1]["creator"] == "maker2", cards
         assert cards[1]["views"] == "235", cards[1]
@@ -65,12 +65,20 @@ def main():
         assert not any("reply that must be ignored" in r["text"] for r in got["rows"])
         print(f"readCommentsPage ok: {len(got['rows'])} comments, first = {got['rows'][0]}")
 
-        # a page without the expected elements reports what it does have
-        page.set_content('<body><div data-e2e="something-new">x</div><div data-e2e="browse-music">m</div></body>')
+        # a video with no caption still counts as opened, and can be closed again
+        page.set_content(search_html())
+        assert page.evaluate(fn("clickCard", "'/@maker4/video/4'")) is True
         info = page.evaluate(fn("readOpenVideo"))
-        assert info["caption"] == "" and info["markers"] == ["something-new", "browse-music"], info
+        assert info["opened"] is True and info["caption"] == "" and info["comments"] == "40" and info["markers"] == [], info
+        assert page.evaluate(fn("closeVideo")) is True and page.query_selector('[data-e2e="browse-close"]') is None
+        print("a video with no caption: opened, caption empty, closes ok")
+
+        # nothing opened: report which elements the page has, leaving out the menus
+        page.set_content('<body><a data-e2e="nav-foryou">x</a><div data-e2e="inbox-list">y</div><div data-e2e="something-new">x</div><div data-e2e="browse-music">m</div></body>')
+        info = page.evaluate(fn("readOpenVideo"))
+        assert info["opened"] is False and info["caption"] == "" and info["markers"] == ["something-new", "browse-music"], info
         assert page.evaluate(fn("readCommentsPage")) == {"ok": False, "rows": []}
-        print("missing caption lists the page's elements:", info["markers"])
+        print("nothing opened lists the page's elements:", info["markers"])
         b.close()
 
 
