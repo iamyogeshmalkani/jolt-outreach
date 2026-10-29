@@ -86,13 +86,14 @@ Nothing is uploaded to GitHub.
 By default everything stays in one Chrome. To share it across devices (and teammates), the extension can
 keep your posts, statuses, edits and settings in a **private** GitHub repo:
 
-1. Make a **private** repo (for example `jolt-reddit-data`). It holds other people's usernames and what
-   they wrote, so keep it private. The extension refuses a public repo.
+1. The sync repo is `jolt-reddit-data`, and it must stay **private**: it holds other people's usernames and what
+   they wrote. The extension refuses a public repo.
 2. Make a token at https://github.com/settings/personal-access-tokens/new: **Only select repositories**, pick
    that repo, and set **Contents** to **Read and write**. (This is a different token from the TikTok
    extension's, which is limited to a different repo.)
-3. On each device, open **Settings**, fill in **Private sync repo** and **Sync token**, then choose **Test sync**.
-   Teammates need access to the repo and their own token.
+3. On each device, open **Settings**, paste the token under **Sync token**, then choose **Test sync**. The repo
+   name is already filled in. A token cannot say which repo it is for, so it stays a visible setting. Change
+   it only to sync through a different private repo. Teammates need access to the repo and their own token.
 
 After that it syncs by itself: before and after each run, a moment after you change anything in the
 dashboard, when you come back to the dashboard tab, and with **Sync now**.

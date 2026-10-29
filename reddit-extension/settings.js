@@ -60,7 +60,8 @@ $('save').onclick = async () => {
 
 $('testSync').onclick = async () => {
   const s = read(await stored())
-  if (!s.syncRepo || !s.syncToken) return say('syncMsg', 'Fill in the repo and the token first.', true)
+  if (!s.syncToken) return say('syncMsg', 'Paste your sync token first.', true)
+  if (!s.syncRepo) return say('syncMsg', 'Fill in the repo.', true)
   if (!/^[\w.-]+\/[\w.-]+$/.test(s.syncRepo)) return say('syncMsg', 'The repo should look like owner/name.', true)
   say('syncMsg', 'Checking…')
   try {

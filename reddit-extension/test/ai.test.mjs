@@ -185,3 +185,10 @@ test('an older saved key (typed into the xAI box) keeps working, and a Groq key 
   assert.equal(normalize({}).provider, 'groq')
   assert.ok(!('xaiKey' in normalize({ xaiKey: 'x' })))
 })
+
+test('the sync repo is filled in, so only a token is needed; an empty box means the usual repo', () => {
+  assert.equal(normalize({}).syncRepo, 'iamyogeshmalkani/jolt-reddit-data')
+  assert.equal(normalize({ syncRepo: '' }).syncRepo, 'iamyogeshmalkani/jolt-reddit-data')
+  assert.equal(normalize({ syncRepo: '   ' }).syncRepo, 'iamyogeshmalkani/jolt-reddit-data')
+  assert.equal(normalize({ syncRepo: 'team/other-data' }).syncRepo, 'team/other-data')
+})

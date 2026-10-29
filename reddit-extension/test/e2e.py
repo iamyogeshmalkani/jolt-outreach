@@ -155,6 +155,7 @@ def main():
         sw.evaluate("base => chrome.storage.local.get('settings').then(r => chrome.storage.local.set({settings: {...r.settings, redditBase: base, aiApi: base}}))", base)
         st.reload()
         assert st.input_value("#provider") == "groq", "Groq is the default provider"
+        assert st.input_value("#syncRepo") == "iamyogeshmalkani/jolt-reddit-data", "the sync repo is filled in, so only a token is needed"
         # a key from the other provider is explained, not sent
         st.fill("#aiKey", "xai-wrongprovider")
         st.click("#testAi")

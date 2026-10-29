@@ -16,7 +16,7 @@ export const DEFAULTS = {
     "what to build next, I'm talking to people about their real phone habits. " +
     "Up for a 20-min chat? As a thanks, you'd get {OFFER}.",
   subject: 'Quick question about your comment in r/{SUB}',
-  syncRepo: '',        // a PRIVATE GitHub repo, "owner/name", used to keep your devices in step (this device only)
+  syncRepo: 'iamyogeshmalkani/jolt-reddit-data', // the PRIVATE GitHub repo ("owner/name") that keeps your devices in step. A token cannot say which repo it is for, so this is filled in; only change it to use another repo
   syncToken: '',       // a GitHub token with Contents: Read and write on that repo (this device only)
   settingsAt: 0,       // when the synced settings were last changed, so the newest copy wins
 }
@@ -35,5 +35,6 @@ export function normalize(saved = {}) {
     if (!saved.provider) s.provider = s.aiKey.startsWith('gsk_') ? 'groq' : 'xai' // a key from Groq belongs to Groq, whichever box it was typed in
   }
   delete s.xaiKey
+  if (!(s.syncRepo || '').trim()) s.syncRepo = DEFAULTS.syncRepo // an empty box means "the usual one"
   return s
 }

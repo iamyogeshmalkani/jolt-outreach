@@ -67,15 +67,15 @@
       <h2>Use it on more than one device (optional)</h2>
       <p class="hint">
         Your posts, statuses, edits and settings are kept in a <b>private</b> GitHub repo, so every device (and teammate with access) sees
-        the same list. Make a new private repo, then make a token at github.com/settings/personal-access-tokens/new: choose
-        <b>Only select repositories</b>, pick that repo, and set <b>Contents</b> to <b>Read and write</b>. Do the same on each device.
+        the same list. Make a token at github.com/settings/personal-access-tokens/new: choose <b>Only select repositories</b>, pick the private repo below, and
+        set <b>Contents</b> to <b>Read and write</b>. Paste it here. Do the same on each device.
         Your AI key and this token stay on each device and are never synced.
       </p>
-      <label>Private sync repo
-        <input id="syncRepo" placeholder="owner/name" autocomplete="off" />
-      </label>
       <label>Sync token
         <input id="syncToken" type="password" autocomplete="off" />
+      </label>
+      <label>Private repo to sync through <span class="hint">(filled in for you; a token cannot say which repo it is for)</span>
+        <input id="syncRepo" placeholder="owner/name" autocomplete="off" />
       </label>
       <div class="row"><button id="testSync" class="secondary">Test sync</button><span id="syncMsg" role="status"></span></div>
     </section>
