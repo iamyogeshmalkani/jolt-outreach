@@ -2,23 +2,69 @@
 
 export const MINOR =
   /high ?school|middle ?school|\bgrade \d+|\d+(st|nd|rd|th) grade|freshman|sophomore|my (mom|mum|dad|parents)|i'?m (1[0-7])\b|\b1[0-7] ?(yo|y\/o|years? old)|homework|teacher/i
+// Crisis topics only. Everyday mental-health words (anxiety, depression, therapy, trauma, panic, medication, coping) are allowed through
+// to the AI, because people often describe their phone habit that way. Messaging someone who is writing about self-harm, suicide, an
+// eating disorder or abuse is never appropriate, so those stay blocked here and the AI is told to reject them too.
 export const SENSITIVE =
-  /suicid|kill myself|self.?harm|cutting myself|cut myself|cutting my (wrists?|arms?|legs?|thighs?|skin)|anorex|bulimi|eating disorder|overdose|medicat|\bmeds\b|therap|trauma|abus|depress|anxiety|panic|ptsd|bipolar|numb myself|\bcope\b|coping/i
+  /suicid|kill myself|self.?harm|cutting myself|cut myself|cutting my (wrists?|arms?|legs?|thighs?|skin)|anorex|bulimi|eating disorder|overdose|abus/i
 export const SEXUAL = /\b(sex|nsfw|onlyfans|nude|horny)\b/i
 export const BRAND_HANDLE = /(app|official|\.io|promo|deals|steals|coupon|bot|shop|store|ugc|agency)/i
 // No "i" flag, on purpose: the code pattern only matches upper-case codes.
 export const PROMO = /https?:\/\/|www\.|use my code|referral|promo|(?=[A-Z0-9]*\d)(?=[A-Z0-9]*[A-Z])\b[A-Z0-9]{6,9}\b/
+// Phrases that show someone has already tried to fix this. Mentioning a competitor (see mentionsCompetitor) counts too.
 export const PRIORITY_A =
-  /stopped working|didn'?t work|only worked|worked for|came back|relapse|tried|opal|one ?sec|brick|screenzen|freedom|forest|clearspace|jomo|headway|blinkist|ignore|bypass|5 more minutes|can'?t figure|don'?t know how|how (do|can) (i|you)|\d+ ?(hrs|hours)/i
+  /stopped working|didn'?t work|only worked|worked for|came back|relapse|tried|ignore|bypass|5 more minutes|can'?t figure|don'?t know how|how (do|can) (i|you)|\d+ ?(hrs|hours)/i
 export const STUDY = /\b(study|studying|exam|exams|class|classes|school)\b/i
 
-export const QUERIES = [
-  'opal app review', 'one sec app', 'brick phone blocker review', 'screenzen app', 'forest app focus',
-  'freedom app blocker', 'clearspace app', 'jomo app', 'headway app review', 'blinkist review',
-  'deepstash app', 'imprint app learning', 'brilliant app review', 'i cant stop doomscrolling',
-  'my screen time is embarrassing', 'phone addiction', 'dopamine detox', 'brain rot scrolling',
-  'how to stop scrolling', 'screen time reveal',
+// The apps people compare us with, in three groups. The user can change these lists in Settings.
+export const COMPETITOR_GROUPS = [
+  { key: 'screenTime', label: 'Screen-time apps' },
+  { key: 'learn', label: 'Learn apps' },
+  { key: 'play', label: 'Play apps' },
 ]
+export const DEFAULT_COMPETITORS = {
+  screenTime: ['Opal', 'one sec', 'Brick', 'ScreenZen', 'Apple Screen Time', 'Freedom', 'Forest', 'Clearspace', 'Jomo'],
+  learn: ['Empirio', 'Headway', 'Blinkist', 'Deepstash', 'Paladin', 'Imprint'],
+  play: ['Matiks', 'Brilliant'],
+}
+
+// "Opal\none sec, Brick" -> ['Opal', 'one sec', 'Brick']. Used by the Settings page.
+export function parseNames(text, max = 40) {
+  const out = []
+  for (const raw of String(text || '').split(/[\n,;]+/)) {
+    const name = raw.trim().replace(/\s+/g, ' ').slice(0, 60)
+    if (name && !out.some((x) => x.toLowerCase() === name.toLowerCase()) && out.length < max) out.push(name)
+  }
+  return out
+}
+
+export function competitorNames(competitors = DEFAULT_COMPETITORS) {
+  const all = COMPETITOR_GROUPS.flatMap((g) => (Array.isArray(competitors?.[g.key]) ? competitors[g.key] : []))
+  return parseNames(all.join('\n'))
+}
+
+// Topic searches: what people type when the habit is on their mind. The user can change this list in Settings.
+export const DEFAULT_KEYWORDS = [
+  'i cant stop doomscrolling', 'my screen time is embarrassing', 'phone addiction', 'dopamine detox',
+  'brain rot scrolling', 'how to stop scrolling', 'screen time reveal', 'digital detox',
+  'social media addiction', 'put my phone down', 'procrastinating on my phone', 'phone ruining my focus',
+  'quit social media', 'doomscrolling and anxiety', 'productivity vs scrolling',
+]
+export const competitorQueries = (competitors = DEFAULT_COMPETITORS) => competitorNames(competitors).map((n) => `${n} app review`)
+export const keywordQueries = (keywords = DEFAULT_KEYWORDS) => parseNames((Array.isArray(keywords) ? keywords : []).join('\n'))
+export const buildQueries = (competitors = DEFAULT_COMPETITORS, keywords = DEFAULT_KEYWORDS) => [
+  ...competitorQueries(competitors),
+  ...keywordQueries(keywords),
+]
+export const QUERIES = buildQueries()
+
+const escapeRx = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+// True when the text names one of the competitors as a whole word, ignoring case and spacing ("one sec", "onesec").
+export function mentionsCompetitor(text, names) {
+  if (!names.length) return false
+  const body = names.map((n) => n.trim().split(/\s+/).map(escapeRx).join('\\s*')).join('|')
+  return new RegExp(`(?<![a-z0-9])(?:${body})(?![a-z0-9])`, 'i').test(text || '')
+}
 
 // One run is small on purpose: it runs every hour, so the day's total adds up without any single run being long.
 export const LIMITS = {
@@ -47,7 +93,7 @@ export function isCandidate(handle, text, creator) {
   return true
 }
 
-export const priority = (text) => (PRIORITY_A.test(text) ? 'A' : 'B')
+export const priority = (text, names = competitorNames()) => (PRIORITY_A.test(text) || mentionsCompetitor(text, names) ? 'A' : 'B')
 
 export function opener(text) {
   for (const [rx, line] of OPENERS) if (rx.test(text)) return line
@@ -57,16 +103,18 @@ export function opener(text) {
 }
 
 // ---- the shape saved to people.json (what the page reads) ----
-export function makePerson(row, { creator, query, url }, today) {
+// `runAt` is the same for everyone a run finds; the page tags the people from the latest run as New.
+export function makePerson(row, { creator, query, url, runAt, names }, today) {
   return {
     handle: row.handle,
     comment: row.text,
-    priority: priority(row.text),
+    priority: priority(row.text, names),
     source: `${query} · @${creator}`,
     url,
     note: STUDY.test(row.text) ? "Mentions studying. Confirm they're 18+ before booking." : '',
     opener: opener(row.text),
     added: today,
+    found: runAt,
   }
 }
 
@@ -91,6 +139,17 @@ export function shuffled(arr, seed = Math.floor(Math.random() * 2 ** 32)) {
 }
 export const hourSeed = () => Math.floor(Date.now() / 3_600_000)
 export const pickQueries = (pool, n, seed = hourSeed()) => shuffled(pool, seed).slice(0, n)
+
+// A run searches both kinds: about half competitor searches and half keyword searches, so the many competitors
+// don't crowd out the keywords. If one list is empty the run uses the other.
+export function pickRunQueries(competitors, keywords, n, seed = hourSeed()) {
+  const c = competitorQueries(competitors)
+  const k = keywordQueries(keywords)
+  if (!c.length || !k.length) return pickQueries([...c, ...k], n, seed)
+  const fromC = Math.min(c.length, Math.ceil(n / 2))
+  const fromK = Math.min(k.length, n - fromC)
+  return [...pickQueries(c, fromC, seed), ...pickQueries(k, fromK, seed + 1)]
+}
 
 export function todayIso(d = new Date()) {
   const p = (n) => String(n).padStart(2, '0')

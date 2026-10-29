@@ -7,6 +7,7 @@ export type Person = {
   note: string
   opener: string
   added: string
+  found?: string // when the run that found them happened; the latest run's people are tagged New
 }
 
 export type Config = { name: string; offer: string; body: string }

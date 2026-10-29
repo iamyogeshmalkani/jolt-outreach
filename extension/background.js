@@ -102,7 +102,7 @@ async function run(manual, delayMs = 0) {
     win = await chrome.windows.create({ url: 'about:blank', focused: false }) // no fixed size: a size that does not fit the screen is rejected
     const browser = makeBrowser(win.tabs[0].id)
     const ai = { provider: s.aiProvider, key: s.aiKey.trim(), model: s.aiModel, ...(s.aiApi ? { api: s.aiApi } : {}) } // `aiApi` is only set by tests
-    const result = await findPeople(browser, known, seen, log, (rows) => pickRelevant(ai, rows))
+    const result = await findPeople(browser, known, seen, log, (rows) => pickRelevant(ai, rows), { competitors: s.competitors, keywords: s.keywords })
 
     const found = result.people.length
     if (found && s.aiKey && s.useAi) {

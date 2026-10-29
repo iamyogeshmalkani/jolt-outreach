@@ -117,6 +117,10 @@ def main():
         opts.goto(f"chrome-extension://{ext_id}/options.html")
         providers = opts.eval_on_selector_all("#aiProvider option", "els => els.map(e => e.value)")
         assert providers == ["groq", "anthropic"], providers
+        screen = opts.input_value("#comp-screenTime").split("\n")
+        assert screen[0] == "Opal" and "Apple Screen Time" in screen, screen
+        assert "Matiks" in opts.input_value("#comp-play") and "Paladin" in opts.input_value("#comp-learn")
+        assert "phone addiction" in opts.input_value("#keywords").split("\n")
         opts.fill("#repo", "not a repo")
         opts.fill("#token", "x")
         opts.click("#save")
@@ -133,6 +137,7 @@ def main():
         assert not status.get("error"), status
         people = json.loads(FILES["people.json"]["text"])
         assert 1 <= len(people) <= 8, len(people)
+        assert len({x["found"] for x in people}) == 1 and people[0]["found"], "everyone from one run shares a run time"
         assert all(x["handle"].startswith("fan") and "reply that must be ignored" not in x["comment"] for x in people)
         assert all(x["opener"].startswith("Groq opener number") and x["priority"] in "AB" for x in people), [x["opener"] for x in people][:3]
         assert all(path == "/openai/v1/chat/completions" and call["model"] == "openai/gpt-oss-20b" for path, call in AI_CALLS), AI_CALLS

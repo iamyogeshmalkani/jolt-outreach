@@ -34,6 +34,7 @@ export default function Queue(p: Props) {
             >
               <span className="row-head">
                 <span className="handle">{i.title}</span>
+                {i.isNew && <span className="tag new">New</span>}
                 {i.priority === 'A' && <span className="tag">Specific</span>}
                 {(p.view === 2) && <span className="state">{p.statusOf(i)}</span>}
               </span>

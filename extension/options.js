@@ -1,6 +1,7 @@
 import { PROVIDERS, check } from './lib/llm.js'
 import { checkAccess } from './lib/github.js'
 import { DEFAULTS } from './lib/settings.js'
+import { COMPETITOR_GROUPS, parseNames } from './lib/rules.js'
 
 const $ = (id) => document.getElementById(id)
 const say = (text, bad = false) => {
@@ -14,6 +15,8 @@ async function load() {
   for (const k of ['repo', 'token', 'startHour', 'endHour', 'skip', 'aiProvider', 'aiKey', 'aiModel']) $(k).value = s[k]
   if (!PROVIDERS[s.aiProvider]) $('aiProvider').value = DEFAULTS.aiProvider // a provider this version no longer offers
   $('useAi').checked = s.useAi
+  $('keywords').value = (s.keywords ?? DEFAULTS.keywords).join('\n')
+  for (const g of COMPETITOR_GROUPS) $(`comp-${g.key}`).value = (s.competitors?.[g.key] ?? DEFAULTS.competitors[g.key]).join('\n')
   explainProvider()
 }
 
@@ -30,6 +33,8 @@ $('save').onclick = async () => {
     aiKey: $('aiKey').value.trim(),
     aiModel: $('aiModel').value.trim(),
     useAi: $('useAi').checked,
+    keywords: parseNames($('keywords').value),
+    competitors: Object.fromEntries(COMPETITOR_GROUPS.map((g) => [g.key, parseNames($(`comp-${g.key}`).value)])),
   }
   if (!/^[\w.-]+\/[\w.-]+$/.test(next.repo)) return say('The repo should look like owner/name.', true)
   if (!next.token) return say('Paste your GitHub token.', true)

@@ -129,3 +129,16 @@ test('when the AI cannot answer, the run ends with its reason and saves nothing 
   assert.equal(opened(b).length, 1, 'stops at the first failure')
   assert.equal(b.calls.filter(([k]) => k === 'close').length, 1, 'the video is closed again')
 })
+
+test('searches use the competitors and keywords from settings, one of each per run, and one run time for everyone', async () => {
+  const cards = [card(1), card(2)]
+  const rows = [{ handle: 'p1', text: 'Quit again for a couple days but unfortunately came back to it.' }, { handle: 'p2', text: 'I cannot stop scrolling and Zenly did not help' }]
+  const comments = Object.fromEntries(cards.map((c) => [c.url, { ok: true, rows }]))
+  const b = fakeBrowser({ cards, comments })
+  const out = await findPeople(b, empty(), seen(), undefined, judge, { competitors: { screenTime: ['Zenly'], learn: [], play: [] }, keywords: ['phone addiction'] })
+  assert.deepEqual(b.calls.filter(([k]) => k === 'search').map(([, q]) => q), ['Zenly app review', 'phone addiction'])
+  assert.equal(out.people.length, 2)
+  assert.equal(new Set(out.people.map((p) => p.found)).size, 1)
+  assert.ok(out.people[0].found)
+  assert.deepEqual(out.people.map((p) => p.priority), ['A', 'A'])
+})

@@ -24,6 +24,25 @@
     </section>
 
     <section>
+      <h2>What to search for</h2>
+      <p class="hint">Each run searches TikTok for one competitor and one keyword, then reads the comments of the videos it finds.
+        One entry per line. People who mention a competitor are tagged Specific.</p>
+      <label>Keywords <span class="hint">(searched as typed, e.g. phone addiction)</span>
+        <textarea id="keywords" rows="8" autocomplete="off"></textarea>
+      </label>
+      <p class="hint">Competitors are searched as "name app review".</p>
+      <label>Screen-time apps
+        <textarea id="comp-screenTime" rows="6" autocomplete="off"></textarea>
+      </label>
+      <label>Learn apps
+        <textarea id="comp-learn" rows="5" autocomplete="off"></textarea>
+      </label>
+      <label>Play apps
+        <textarea id="comp-play" rows="3" autocomplete="off"></textarea>
+      </label>
+    </section>
+
+    <section>
       <h2>When it runs</h2>
       <div class="row">
         <label>From hour <input id="startHour" type="number" min="0" max="23" /></label>

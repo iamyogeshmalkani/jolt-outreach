@@ -5,7 +5,7 @@
 //   comments() -> { ok, rows }                            the comments of the opened video
 //   closeVideo()                                          back to the results
 //   pause(a, b)                                           a short, random wait
-import { LIMITS, QUERIES, isCandidate, makePerson, pickQueries, shuffled, todayIso } from './rules.js'
+import { DEFAULT_COMPETITORS, DEFAULT_KEYWORDS, LIMITS, competitorNames, isCandidate, makePerson, pickRunQueries, shuffled, todayIso } from './rules.js'
 
 export class Stop extends Error {}
 class AiError extends Error {}
@@ -21,10 +21,13 @@ async function notOpened(browser, creator, info, log) {
 // Looks through the comments of a few popular videos and collects people who describe their own struggle.
 //   judge(rows) -> rows   the AI's pick of the comments that are really about the writer's own habit; it throws if it can't answer,
 //                         which ends the run (out.aiError) rather than saving comments nobody has checked
-export async function findPeople(browser, known, seen, log = async () => {}, judge) {
+//   competitors, keywords  what to search for: one competitor search and one keyword search per run (see pickRunQueries)
+export async function findPeople(browser, known, seen, log = async () => {}, judge, { competitors = DEFAULT_COMPETITORS, keywords = DEFAULT_KEYWORDS } = {}) {
   const out = { people: [], stopped: '', aiError: '' }
   const today = todayIso()
-  const queries = pickQueries(QUERIES, LIMITS.peopleQueries)
+  const runAt = new Date().toISOString()
+  const names = competitorNames(competitors)
+  const queries = pickRunQueries(competitors, keywords, LIMITS.peopleQueries)
   const perQuery = Math.ceil(LIMITS.peopleVideos / queries.length)
   let opened = 0
   let fails = 0
@@ -71,7 +74,7 @@ export async function findPeople(browser, known, seen, log = async () => {}, jud
           const key = row.handle.toLowerCase()
           if (seen.handles.has(key)) continue // the same person can have two comments on one video
           seen.handles.add(key)
-          out.people.push(makePerson(row, { creator, query, url: card.url }, today))
+          out.people.push(makePerson(row, { creator, query, url: card.url, runAt, names }, today))
           added++
         }
         await log(`@${creator}: ${page.rows.length} comments, ${fresh.length} to check, ${added} about their own habit`)
