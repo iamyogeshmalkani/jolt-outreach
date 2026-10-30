@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react'
-import { sub } from './helpers'
 import type { Config } from './types'
 
 type Props = { open: boolean; cfg: Config; onChange: (c: Config) => void; onClose: () => void }
@@ -24,14 +23,13 @@ export default function TemplateDialog({ open, cfg, onChange, onClose }: Props) 
           <input value={cfg.name} onChange={(e) => onChange({ ...cfg, name: e.target.value })} />
         </label>
         <label>
-          What they get for their time
-          <input value={cfg.offer} onChange={(e) => onChange({ ...cfg, offer: e.target.value })} />
+          Message to people who comment. {'{NAME}'} is their name and {'{ME}'} is yours.
+          <textarea rows={10} value={cfg.commenterBody} onChange={(e) => onChange({ ...cfg, commenterBody: e.target.value })} />
         </label>
         <label>
-          Main message. {'{NAME}'} and {'{OFFER}'} fill in from above.
-          <textarea rows={5} value={cfg.body} onChange={(e) => onChange({ ...cfg, body: e.target.value })} />
+          Message to creators. Replace [specific project/topic] on each message.
+          <textarea rows={10} value={cfg.creatorBody} onChange={(e) => onChange({ ...cfg, creatorBody: e.target.value })} />
         </label>
-        <p className="preview">{sub(cfg.body, cfg)}</p>
         <button className="primary">Done</button>
       </form>
     </dialog>

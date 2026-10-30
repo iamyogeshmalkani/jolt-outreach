@@ -6,6 +6,7 @@ export type Item = {
   title: string            // @handle
   theirs: string           // what they wrote
   reply: string            // the message we would send
+  creator: boolean         // gets the creator message
   priority: 'A' | 'B'
   isNew: boolean           // found by the latest run that found anyone
   note?: string
@@ -14,18 +15,18 @@ export type Item = {
   profileUrl: string
 }
 
-export const sub = (text: string, cfg: Config) =>
-  text
-    .replaceAll('{NAME}', cfg.name.trim() || '[name]')
-    .replaceAll('{OFFER}', cfg.offer.trim() || '[offer]')
+// {ME} is your first name, {NAME} is the person you are writing to.
+export const sub = (text: string, cfg: Config, them = '[Name]') =>
+  text.replaceAll('{ME}', cfg.name.trim() || '[Your Name]').replaceAll('{NAME}', them)
 
-export function buildItems(people: Person[], cfg: Config): Item[] {
+export function buildItems(people: Person[], cfg: Config, creators: Record<string, boolean> = {}): Item[] {
   const latest = people.reduce((max, p) => (p.found && p.found > max ? p.found : max), '')
   return people.map((p) => ({
     key: `p:${p.handle}`,
     title: `@${p.handle}`,
     theirs: p.comment,
-    reply: `Hey! ${p.opener} ${sub(cfg.body.trim(), cfg)}`,
+    reply: sub((creators[`p:${p.handle}`] ? cfg.creatorBody : cfg.commenterBody).trim(), cfg, p.handle),
+    creator: Boolean(creators[`p:${p.handle}`]),
     priority: p.priority,
     isNew: Boolean(latest) && p.found === latest,
     note: p.note || undefined,

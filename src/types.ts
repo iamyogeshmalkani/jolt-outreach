@@ -10,13 +10,15 @@ export type Person = {
   found?: string // when the run that found them happened; the latest run's people are tagged New
 }
 
-export type Config = { name: string; offer: string; body: string }
+export type Config = { name: string; commenterBody: string; creatorBody: string }
 
 export type UiState = {
   statuses: Record<string, string>
   edits: Record<string, string>
   // When an item first moved past its starting status (ISO time). Drives the "today" count.
   doneAt: Record<string, string>
+  // Items that get the creator message instead of the commenter one.
+  creators: Record<string, boolean>
   cfg: Config
 }
 
@@ -37,13 +39,25 @@ export const PREV_STEP = ['Unmark as sent', 'Unmark replied', 'Unmark booked']
 
 export const DAILY_LIMIT = 25
 
+// {NAME} is the person we write to, {ME} is you. Written messages never use em dashes.
 export const DEFAULT_CFG: Config = {
   name: 'Isha',
-  offer: 'a year of Jolt Premium + a $3 gift card',
-  body:
-    "I'm {NAME} from Jolt. We help people get control of their screen time, and before we decide " +
-    "what to build next, I'm talking to people about their real phone habits. " +
-    'Up for a 20-min chat? As a thanks, you\'d get {OFFER}.',
+  commenterBody: [
+    "Hey {NAME}, I'm {ME} from Jolt.",
+    "We're speaking with people interested in screen-time and focus tools to understand their real experiences with phone habits and what, if anything, they'd like to change.",
+    "At Jolt, we've spent the past year helping people regain control over their screen time. We're now exploring whether we could also help people make better use of some of the time they spend scrolling.",
+    "It's still early, and we haven't decided what to build. We'd love to hear how people actually experience this problem before choosing a direction.",
+    'Would you be open to a 30-minute research chat? As a thank-you, we\'ll give you one year of Jolt Premium (worth $99)',
+    'Interested?',
+  ].join('\n\n'),
+  creatorBody: [
+    "Hey {NAME}, I'm {ME} from Jolt. I came across your work on [specific project/topic] and thought your perspective could be useful.",
+    "We're researching how people who create and consume digital content think about their attention and the time they spend on their phones.",
+    "We've spent the past year helping people regain control over their screen time. Now we're exploring whether there's a useful way to help people make better use of some of that time.",
+    "We haven't decided what to build, and we want to understand people's experiences before choosing a direction.",
+    "Would you be open to a 20-minute research conversation? This isn't a creator partnership pitch. We're looking for candid perspectives.",
+    "As a thank-you, we'll give you one year of Jolt Premium (worth $99)",
+  ].join('\n\n'),
 }
 
-export const EMPTY_STATE: UiState = { statuses: {}, edits: {}, doneAt: {}, cfg: DEFAULT_CFG }
+export const EMPTY_STATE: UiState = { statuses: {}, edits: {}, doneAt: {}, creators: {}, cfg: DEFAULT_CFG }

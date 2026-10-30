@@ -10,6 +10,7 @@ type Props = {
   edited: boolean
   onReply: (text: string) => void
   onRestore: () => void
+  onCreator: (on: boolean) => void
   onStatus: (s: string) => void
   onBack: () => void
   registerCopy: (fn: () => void) => void
@@ -84,7 +85,11 @@ export default function Conversation(p: Props) {
 
         <div className="out">
           <label className="sr" htmlFor="reply">Your message</label>
-          <textarea id="reply" ref={area} value={p.reply} rows={5} onChange={(e) => p.onReply(e.target.value)} />
+          <label className="kind">
+            <input type="checkbox" checked={item.creator} onChange={(e) => p.onCreator(e.target.checked)} />
+            This person is a creator
+          </label>
+          <textarea id="reply" ref={area} value={p.reply} rows={14} onChange={(e) => p.onReply(e.target.value)} />
         </div>
         {p.edited && <button className="quiet restore" onClick={p.onRestore}>Restore original</button>}
       </section>

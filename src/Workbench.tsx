@@ -19,7 +19,7 @@ export default function Workbench({ loaded }: { loaded: Loaded }) {
 
   const statuses = STATUSES
   const viewDefs = VIEWS
-  const items = useMemo(() => buildItems(loaded.people, ui.cfg), [loaded.people, ui.cfg])
+  const items = useMemo(() => buildItems(loaded.people, ui.cfg, ui.creators), [loaded.people, ui.cfg, ui.creators])
   const statusOf = useCallback((i: Item) => ui.statuses[i.key] ?? statuses[0], [ui.statuses, statuses])
   const viewOf = useCallback(
     (i: Item) => viewDefs.findIndex((v) => v.at.includes(statuses.indexOf(statusOf(i)))),
@@ -103,6 +103,15 @@ export default function Workbench({ loaded }: { loaded: Loaded }) {
       return { ...u, edits }
     })
 
+  // Switches a person between the commenter and the creator message. A message they edited by hand is kept.
+  const setCreator = (item: Item, on: boolean) =>
+    setUi((u) => {
+      const creators = { ...u.creators }
+      if (on) creators[item.key] = true
+      else delete creators[item.key]
+      return { ...u, creators }
+    })
+
   const copyRef = useRef<() => void>(() => {})
 
   // Quiet shortcuts: J and K move through the queue, C copies the reply.
@@ -170,6 +179,7 @@ export default function Workbench({ loaded }: { loaded: Loaded }) {
         edited={current ? current.key in ui.edits : false}
         onReply={(t) => current && setReply(current, t)}
         onRestore={() => current && setReply(current, null)}
+        onCreator={(on) => current && setCreator(current, on)}
         onStatus={(s) => current && setStatus(current, s)}
         onBack={() => setPane('list')}
         registerCopy={(fn) => { copyRef.current = fn }}
