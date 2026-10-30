@@ -75,7 +75,8 @@ export async function load(): Promise<Loaded> {
     mode,
     dir,
     people: demo ? DEMO_PEOPLE : people,
-    state: { ...EMPTY_STATE, ...saved, cfg: { ...EMPTY_STATE.cfg, ...saved?.cfg } },
+    // 'Isha' was the old default name, so a browser that still has it gets the new default.
+    state: { ...EMPTY_STATE, ...saved, cfg: { ...EMPTY_STATE.cfg, ...saved?.cfg, ...(saved?.cfg?.name === 'Isha' ? { name: EMPTY_STATE.cfg.name } : {}) } },
     demo,
   }
 }

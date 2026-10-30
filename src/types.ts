@@ -41,7 +41,7 @@ export const DAILY_LIMIT = 25
 
 // {NAME} is the person we write to, {ME} is you. Written messages never use em dashes.
 export const DEFAULT_CFG: Config = {
-  name: 'Isha',
+  name: 'Meghan',
   commenterBody: [
     "Hey {NAME}, I'm {ME} from Jolt.",
     "We're speaking with people interested in screen-time and focus tools to understand their real experiences with phone habits and what, if anything, they'd like to change.",
