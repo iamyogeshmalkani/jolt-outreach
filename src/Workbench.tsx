@@ -5,6 +5,7 @@ import { DAILY_LIMIT, STATUSES, VIEWS, type UiState } from './types'
 import Queue from './Queue'
 import Conversation from './Conversation'
 import TemplateDialog from './TemplateDialog'
+import { CHUNK, getKey, setKey, writeReplies } from './ai'
 
 type SaveState = 'saved' | 'saving' | 'error'
 
@@ -15,11 +16,14 @@ export default function Workbench({ loaded }: { loaded: Loaded }) {
   const [pane, setPane] = useState<'list' | 'detail'>('list')
   const [saveStatus, setSaveStatus] = useState<SaveState>('saved')
   const [templateOpen, setTemplateOpen] = useState(false)
+  const [apiKey, setApiKey] = useState(getKey)
+  const [writing, setWriting] = useState(false)
+  const [aiNote, setAiNote] = useState('')
   const online = loaded.mode === 'online'
 
   const statuses = STATUSES
   const viewDefs = VIEWS
-  const items = useMemo(() => buildItems(loaded.people, ui.cfg, ui.creators), [loaded.people, ui.cfg, ui.creators])
+  const items = useMemo(() => buildItems(loaded.people, ui.cfg, ui.creators, ui.replies), [loaded.people, ui.cfg, ui.creators, ui.replies])
   const statusOf = useCallback((i: Item) => ui.statuses[i.key] ?? statuses[0], [ui.statuses, statuses])
   const viewOf = useCallback(
     (i: Item) => viewDefs.findIndex((v) => v.at.includes(statuses.indexOf(statusOf(i)))),
@@ -103,6 +107,51 @@ export default function Workbench({ loaded }: { loaded: Loaded }) {
       return { ...u, edits }
     })
 
+  // The public reply is kept under its own key, next to the private message's.
+  const replyKey = (item: Item) => `c:${item.key}`
+  const setCommentReply = (item: Item, text: string | null) =>
+    setUi((u) => {
+      const edits = { ...u.edits }
+      if (text === null || text === item.commentReply) delete edits[replyKey(item)]
+      else edits[replyKey(item)] = text
+      return { ...u, edits }
+    })
+
+  // Asks the AI for the public replies of these people, a few at a time, saving each group as it arrives.
+  const writeFor = async (targets: Item[]) => {
+    if (!apiKey) {
+      setTemplateOpen(true)
+      return
+    }
+    setWriting(true)
+    setAiNote('')
+    let wrote = 0
+    try {
+      for (let i = 0; i < targets.length; i += CHUNK) {
+        const group = targets.slice(i, i + CHUNK)
+        const out = await writeReplies(apiKey, group.map((t) => t.theirs))
+        setUi((u) => {
+          const replies = { ...u.replies }
+          const edits = { ...u.edits }
+          group.forEach((t, j) => {
+            const text = out[j]
+            if (!text) return
+            replies[t.key] = text
+            delete edits[replyKey(t)] // a fresh reply replaces one edited by hand
+            wrote++
+          })
+          return { ...u, replies, edits }
+        })
+      }
+      if (wrote < targets.length) setAiNote(`Wrote ${wrote} of ${targets.length}. The rest broke a rule (such as having a link) and keep the standard reply.`)
+    } catch (e) {
+      setAiNote(e instanceof Error ? e.message : 'Something went wrong.')
+    } finally {
+      setWriting(false)
+    }
+  }
+  const unwritten = visible.filter((i) => !i.written)
+
   // Switches a person between the commenter and the creator message. A message they edited by hand is kept.
   const setCreator = (item: Item, on: boolean) =>
     setUi((u) => {
@@ -132,7 +181,10 @@ export default function Workbench({ loaded }: { loaded: Loaded }) {
       <header className="bar">
         <h1><i className="mark" aria-hidden="true" />Jolt outreach</h1>
         <div className="bar-end">
-          <button className="quiet" onClick={() => setTemplateOpen(true)}>Message template</button>
+          <button className="quiet" onClick={() => writeFor(unwritten)} disabled={writing || (apiKey !== '' && !unwritten.length)}>
+            {writing ? 'Writing replies' : unwritten.length && apiKey ? `Write ${unwritten.length} replies` : 'Write replies'}
+          </button>
+          <button className="quiet" onClick={() => setTemplateOpen(true)}>Settings</button>
           {online && <span className="save">Statuses are saved in this browser</span>}
           {saveStatus !== 'saved' && (
             <span className={`save save-${saveStatus}`} role="status">
@@ -177,6 +229,14 @@ export default function Workbench({ loaded }: { loaded: Loaded }) {
         status={current ? statusOf(current) : statuses[0]}
         reply={current ? (ui.edits[current.key] ?? current.reply) : ''}
         edited={current ? current.key in ui.edits : false}
+        commentReply={current ? (ui.edits[replyKey(current)] ?? current.commentReply) : ''}
+        commentEdited={current ? replyKey(current) in ui.edits : false}
+        written={current?.written ?? false}
+        writing={writing}
+        aiNote={aiNote}
+        onCommentReply={(t) => current && setCommentReply(current, t)}
+        onCommentRestore={() => current && setCommentReply(current, null)}
+        onWrite={() => current && writeFor([current])}
         onReply={(t) => current && setReply(current, t)}
         onRestore={() => current && setReply(current, null)}
         onCreator={(on) => current && setCreator(current, on)}
@@ -190,6 +250,8 @@ export default function Workbench({ loaded }: { loaded: Loaded }) {
       <TemplateDialog
         open={templateOpen}
         cfg={ui.cfg}
+        apiKey={apiKey}
+        onApiKey={(k) => { setApiKey(k); setKey(k) }}
         onChange={(cfg) => setUi((u) => ({ ...u, cfg }))}
         onClose={() => setTemplateOpen(false)}
       />

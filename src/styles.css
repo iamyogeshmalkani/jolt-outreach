@@ -137,6 +137,12 @@ code { font-size: 0.9em; background: rgb(27 36 48 / 0.08); padding: 1px 5px; bor
   border-radius: 26px 4px 26px 26px; padding: 18px 24px 20px; font: 400 16px/1.6 var(--sans);
 }
 .out textarea:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+.out .short { min-height: 6rem; }
+.step { display: block; margin: 0 0 8px; font-size: 14px; font-weight: 600; color: var(--mute); }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 8px; }
+.hint { margin: 8px 0 0; font-size: 13px; color: var(--mute); }
+.hint-error { color: var(--amber); }
+button:disabled { opacity: 0.55; cursor: default; }
 .restore { align-self: flex-end; }
 
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; }

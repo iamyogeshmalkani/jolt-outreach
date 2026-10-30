@@ -8,6 +8,14 @@ type Props = {
   status: string
   reply: string
   edited: boolean
+  commentReply: string
+  commentEdited: boolean
+  written: boolean
+  writing: boolean
+  aiNote: string
+  onCommentReply: (text: string) => void
+  onCommentRestore: () => void
+  onWrite: () => void
   onReply: (text: string) => void
   onRestore: () => void
   onCreator: (on: boolean) => void
@@ -20,20 +28,26 @@ type Props = {
 
 export default function Conversation(p: Props) {
   const [copied, setCopied] = useState(false)
+  const [commentCopied, setCommentCopied] = useState(false)
   const area = useRef<HTMLTextAreaElement>(null)
+  const commentArea = useRef<HTMLTextAreaElement>(null)
   const replyRef = useRef(p.reply)
   replyRef.current = p.reply
+  const commentRef = useRef(p.commentReply)
+  commentRef.current = p.commentReply
 
-  const copy = async () => {
+  const copyText = async (text: string, field: HTMLTextAreaElement | null, done: (on: boolean) => void) => {
     try {
-      await navigator.clipboard.writeText(replyRef.current)
+      await navigator.clipboard.writeText(text)
     } catch {
-      area.current?.select()
+      field?.select()
       document.execCommand('copy')
     }
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1600)
+    done(true)
+    setTimeout(() => done(false), 1600)
   }
+  const copy = () => copyText(replyRef.current, area.current, setCopied)
+  const copyComment = () => copyText(commentRef.current, commentArea.current, setCommentCopied)
   useEffect(() => p.registerCopy(copy)) // always points at the latest reply
 
   if (!p.item) {
@@ -84,7 +98,21 @@ export default function Conversation(p: Props) {
         {item.note && <p className="note">{item.note}</p>}
 
         <div className="out">
-          <label className="sr" htmlFor="reply">Your message</label>
+          <label className="step" htmlFor="comment-reply">1. Reply under their comment</label>
+          <textarea id="comment-reply" ref={commentArea} className="short" value={p.commentReply} rows={5} onChange={(e) => p.onCommentReply(e.target.value)} />
+          <div className="row">
+            <button className="secondary" onClick={copyComment}>{commentCopied ? 'Copied' : 'Copy reply'}</button>
+            <button className="secondary" onClick={p.onWrite} disabled={p.writing}>
+              {p.writing ? 'Writing' : p.written ? 'Write another' : 'Write for this comment'}
+            </button>
+            {p.commentEdited && <button className="quiet" onClick={p.onCommentRestore}>Restore original</button>}
+          </div>
+          {!p.written && !p.writing && <p className="hint">This is the standard reply. Write one for what they said.</p>}
+          {p.aiNote && <p className="hint hint-error" role="status">{p.aiNote}</p>}
+        </div>
+
+        <div className="out">
+          <label className="step" htmlFor="reply">2. Then send this message</label>
           <label className="kind">
             <input type="checkbox" checked={item.creator} onChange={(e) => p.onCreator(e.target.checked)} />
             This person is a creator

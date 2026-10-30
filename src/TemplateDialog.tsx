@@ -1,9 +1,9 @@
 import { useEffect, useRef } from 'react'
 import type { Config } from './types'
 
-type Props = { open: boolean; cfg: Config; onChange: (c: Config) => void; onClose: () => void }
+type Props = { open: boolean; cfg: Config; apiKey: string; onApiKey: (k: string) => void; onChange: (c: Config) => void; onClose: () => void }
 
-export default function TemplateDialog({ open, cfg, onChange, onClose }: Props) {
+export default function TemplateDialog({ open, cfg, apiKey, onApiKey, onChange, onClose }: Props) {
   const ref = useRef<HTMLDialogElement>(null)
 
   useEffect(() => {
@@ -16,7 +16,11 @@ export default function TemplateDialog({ open, cfg, onChange, onClose }: Props) 
   return (
     <dialog ref={ref} className="template" onClose={onClose}>
       <form method="dialog">
-        <h2>Message template</h2>
+        <h2>Settings</h2>
+        <label>
+          Groq API key, used to write the replies under comments. It stays in this browser and is only sent to Groq.
+          <input type="password" autoComplete="off" placeholder="gsk_..." value={apiKey} onChange={(e) => onApiKey(e.target.value)} />
+        </label>
         <p className="hint">Messages update as you type. Edits you made to a single message are kept.</p>
         <label>
           Your first name

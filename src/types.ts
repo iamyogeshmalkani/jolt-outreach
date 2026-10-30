@@ -19,6 +19,8 @@ export type UiState = {
   doneAt: Record<string, string>
   // Items that get the creator message instead of the commenter one.
   creators: Record<string, boolean>
+  // Public replies written by the AI, by item key. A reply edited by hand is kept in `edits` instead.
+  replies: Record<string, string>
   cfg: Config
 }
 
@@ -38,6 +40,10 @@ export const NEXT_STEP = ['Mark as sent', 'They replied', 'Interview booked']
 export const PREV_STEP = ['Unmark as sent', 'Unmark replied', 'Unmark booked']
 
 export const DAILY_LIMIT = 25
+
+// The public reply under a comment until one is written for it.
+export const DEFAULT_REPLY =
+  "That's a reality check so many of us can relate to! We're actually exploring ways at Jolt to help people spend less time scrolling and more time doing things they love. Would love to hear your thoughts as we figure out how to make that happen!"
 
 // {NAME} is the person we write to, {ME} is you. Written messages never use em dashes.
 export const DEFAULT_CFG: Config = {
@@ -60,4 +66,4 @@ export const DEFAULT_CFG: Config = {
   ].join('\n\n'),
 }
 
-export const EMPTY_STATE: UiState = { statuses: {}, edits: {}, doneAt: {}, creators: {}, cfg: DEFAULT_CFG }
+export const EMPTY_STATE: UiState = { statuses: {}, edits: {}, doneAt: {}, creators: {}, replies: {}, cfg: DEFAULT_CFG }
