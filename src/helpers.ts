@@ -14,6 +14,7 @@ export type Item = {
   note?: string
   source: string
   sourceUrl: string        // the video they commented on
+  commentUrl?: string      // jumps to their comment on that video, when its id is known
   profileUrl: string
 }
 
@@ -36,6 +37,7 @@ export function buildItems(people: Person[], cfg: Config, creators: Record<strin
     note: p.note || undefined,
     source: p.source,
     sourceUrl: p.url,
+    commentUrl: p.commentId ? `${p.url}?comment_id=${p.commentId}` : undefined,
     profileUrl: `https://www.tiktok.com/@${p.handle}`,
   }))
 }

@@ -135,3 +135,37 @@ export async function readCommentsPage() {
   })
   return { ok: true, rows }
 }
+
+// The id of each top-level comment, read from the page's own data so a link can jump straight to it. This one must run in the page's
+// own world (not the extension's), because the ids live on the objects the page's scripts attached to the elements. It tries the
+// element's attributes first, then the data TikTok's React code holds. Anything it cannot find is left out, never guessed.
+export function readCommentIds() {
+  const ID = /^\d{15,25}$/
+  const fromProps = (props) => {
+    if (!props || typeof props !== 'object') return ''
+    for (const v of [props, props.comment, props.data, props.commentData, props.item]) {
+      if (v && typeof v === 'object') {
+        for (const k of ['cid', 'comment_id', 'commentId']) if (ID.test(String(v[k] ?? ''))) return String(v[k])
+      }
+    }
+    return ''
+  }
+  const idOf = (el) => {
+    for (let node = el, i = 0; node && i < 6; node = node.parentElement, i++) {
+      for (const a of node.attributes || []) if (/^(id|data-.*(cid|comment).*)$/i.test(a.name) && ID.test((a.value.match(/\d{15,25}/) || [''])[0]) ) return a.value.match(/\d{15,25}/)[0]
+      const key = Object.keys(node).find((k) => k.startsWith('__reactFiber$'))
+      let fiber = key ? node[key] : null
+      for (let d = 0; fiber && d < 12; fiber = fiber.return, d++) {
+        const id = fromProps(fiber.memoizedProps)
+        if (id) return id
+      }
+    }
+    return ''
+  }
+  return [...document.querySelectorAll('[data-e2e="comment-level-1"]')].map((el) => {
+    let c = el
+    for (let i = 0; i < 5 && c && !c.querySelector('a[href^="/@"]'); i++) c = c.parentElement
+    const a = c && c.querySelector('a[href^="/@"]')
+    return { handle: a ? a.getAttribute('href').split('?')[0].slice(2) : '', text: el.innerText.replace(/\s+/g, ' '), id: idOf(el) }
+  })
+}

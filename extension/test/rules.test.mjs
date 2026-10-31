@@ -50,6 +50,16 @@ test('query rotation is steady within an hour and different across hours', () =>
   assert.equal(r.pickQueries(r.QUERIES, 2, 7).length, 2)
 })
 
+test('comment ids are matched to rows by writer and text, and a row without an id stays without one', () => {
+  const rows = [{ handle: 'a', text: 'one' }, { handle: 'b', text: 'two' }, { handle: 'a', text: 'three' }]
+  const out = r.attachIds(rows, [{ handle: 'b', text: 'two', id: '7123456789012345678' }, { handle: 'a', text: 'one', id: '' }])
+  assert.deepEqual(out.map((x) => x.id), [undefined, '7123456789012345678', undefined])
+  assert.deepEqual(r.attachIds(rows, undefined), rows)
+  const base = { creator: 'c', query: 'q', url: 'u', runAt: 'now' }
+  assert.equal(r.makePerson({ handle: 'a', text: 'x', id: '71234567890123456' }, base, 'd').commentId, '71234567890123456')
+  assert.ok(!('commentId' in r.makePerson({ handle: 'a', text: 'x' }, base, 'd')))
+})
+
 test('saved shapes match what the page reads', () => {
   const p = r.makePerson({ handle: 'a', text: 'I study and scroll my phone for hours' }, { creator: 'c', query: 'q', url: 'u', runAt: '2026-10-29T10:00:00.000Z' }, '2026-10-29')
   assert.deepEqual(Object.keys(p).sort(), ['added', 'comment', 'found', 'handle', 'note', 'opener', 'priority', 'source', 'url'])

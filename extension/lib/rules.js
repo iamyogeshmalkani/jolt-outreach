@@ -114,6 +114,13 @@ export function opener(text) {
   return `Saw your comment: “${snippet}”`
 }
 
+// Adds each comment's id (read separately from the page) to its row, matching on who wrote it and what it says.
+export function attachIds(rows, ids) {
+  const key = (x) => `${x.handle}\n${x.text}`
+  const byKey = new Map((ids || []).filter((x) => x?.id).map((x) => [key(x), x.id]))
+  return rows.map((row) => (byKey.has(key(row)) ? { ...row, id: byKey.get(key(row)) } : row))
+}
+
 // ---- the shape saved to people.json (what the page reads) ----
 // `runAt` is the same for everyone a run finds; the page tags the people from the latest run as New.
 export function makePerson(row, { creator, query, url, runAt, names }, today) {
@@ -125,6 +132,7 @@ export function makePerson(row, { creator, query, url, runAt, names }, today) {
     url,
     note: STUDY.test(row.text) ? "Mentions studying. Confirm they're 18+ before booking." : '',
     opener: opener(row.text),
+    ...(row.id ? { commentId: row.id } : {}),
     added: today,
     found: runAt,
   }

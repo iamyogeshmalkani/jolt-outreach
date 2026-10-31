@@ -89,6 +89,7 @@ export default function Conversation(p: Props) {
         </h2>
         <div className="links">
           <a href={item.profileUrl} target="_blank" rel="noopener noreferrer">Profile</a>
+          {item.commentUrl && <a href={item.commentUrl} target="_blank" rel="noopener noreferrer">Comment</a>}
           <a href={item.sourceUrl} target="_blank" rel="noopener noreferrer">Video</a>
         </div>
       </header>

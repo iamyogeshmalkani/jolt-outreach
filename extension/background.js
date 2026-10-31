@@ -1,11 +1,11 @@
 // Runs the finder inside your own Chrome: opens a small TikTok window, reads results the way a person would,
 // and saves what it finds to the `data` branch of your GitHub repo, where the hosted page picks it up.
 import { publish, fetchKnown } from './lib/github.js'
-import { clickCard, closeVideo, readCommentsPage, readGuard, readOpenVideo, readSearchCards } from './lib/pages.js'
+import { clickCard, closeVideo, readCommentIds, readCommentsPage, readGuard, readOpenVideo, readSearchCards } from './lib/pages.js'
 import { DEFAULTS } from './lib/settings.js'
 import { Stop, findPeople } from './lib/tasks.js'
 import { improve, pickRelevant } from './lib/llm.js'
-import { competitorNames } from './lib/rules.js'
+import { attachIds, competitorNames } from './lib/rules.js'
 
 const store = chrome.storage.local
 const getSettings = async () => ({ ...DEFAULTS, ...((await store.get('settings')).settings || {}) })
@@ -37,8 +37,8 @@ function navigate(tabId, url, timeout = 30_000) {
   })
 }
 
-async function exec(tabId, func, args = []) {
-  const [injected] = await chrome.scripting.executeScript({ target: { tabId }, func, args })
+async function exec(tabId, func, args = [], world = 'ISOLATED') {
+  const [injected] = await chrome.scripting.executeScript({ target: { tabId }, func, args, world })
   return injected?.result
 }
 
@@ -68,7 +68,13 @@ function makeBrowser(tabId) {
       return exec(tabId, readOpenVideo)
     },
     closeVideo: () => exec(tabId, closeVideo),
-    comments: () => exec(tabId, readCommentsPage),
+    async comments() {
+      const page = await exec(tabId, readCommentsPage)
+      if (!page?.ok) return page
+      // Comment links are a bonus: if the ids cannot be read, the run goes on without them.
+      const ids = await exec(tabId, readCommentIds, [], 'MAIN').catch(() => [])
+      return { ...page, rows: attachIds(page.rows, ids) }
+    },
   }
 }
 
