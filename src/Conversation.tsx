@@ -88,7 +88,7 @@ export default function Conversation(p: Props) {
           {idx > 0 && <span className="pill">{p.status}</span>}
         </h2>
         <div className="links">
-          <a href={item.commentUrl} target="_blank" rel="noopener noreferrer" title="Opens the video and scrolls to their comment (needs the Jolt finder extension)">Comment</a>
+          <a href={item.commentUrl} target="_blank" rel="noopener noreferrer" title="Opens the video, finds their comment and the other saved ones on it, and lets you step between them (needs the Jolt finder extension)">{item.sameVideo > 1 ? `Comments (${item.sameVideo} on this video)` : 'Comment'}</a>
           <a href={item.sourceUrl} target="_blank" rel="noopener noreferrer">Video</a>
         </div>
       </header>

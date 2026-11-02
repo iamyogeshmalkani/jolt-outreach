@@ -1,7 +1,7 @@
 import { PROVIDERS, check } from './lib/llm.js'
 import { checkAccess } from './lib/github.js'
 import { DEFAULTS } from './lib/settings.js'
-import { COMPETITOR_GROUPS, parseNames } from './lib/rules.js'
+import { COMPETITOR_GROUPS, LIMITS, parseNames } from './lib/rules.js'
 
 const $ = (id) => document.getElementById(id)
 const say = (text, bad = false) => {
@@ -26,7 +26,7 @@ $('save').onclick = async () => {
     ...DEFAULTS, ...settings,
     repo: $('repo').value.trim(),
     token: $('token').value.trim(),
-    videosPerRun: Math.min(60, Math.max(1, Math.round(Number($('videosPerRun').value)) || DEFAULTS.videosPerRun)),
+    videosPerRun: Math.min(LIMITS.maxVideos, Math.max(1, Math.round(Number($('videosPerRun').value)) || DEFAULTS.videosPerRun)),
     startHour: Math.min(23, Math.max(0, Number($('startHour').value) || DEFAULTS.startHour)),
     endHour: Math.min(24, Math.max(1, Number($('endHour').value) || DEFAULTS.endHour)),
     skip: $('skip').value,

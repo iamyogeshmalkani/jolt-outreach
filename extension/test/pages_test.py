@@ -92,13 +92,28 @@ def main():
             pg.evaluate(CONTENT)
             return pg
         pg = jump({"h": "fan30", "t": "quit again for a couple days but came back to it, my phone wins 30"})
-        pg.wait_for_function("document.documentElement.innerText.includes('Jolt: found')", timeout=60000)
+        pg.wait_for_function("document.documentElement.innerText.includes('comment 1 of 1')", timeout=60000)
         hit = pg.evaluate("[...document.querySelectorAll('[data-e2e=\"comment-level-1\"]')].filter(e => e.style.outline).map(e => e.innerText)")
         assert hit == ["Quit again for a couple days but came back to it, my phone wins 30"], hit
         print("jump to a comment far down the list ok")
         pg = jump({"h": "fan3", "t": "this comment does not exist"})
         pg.wait_for_function("document.documentElement.innerText.includes('could not find')", timeout=90000)
         print("a missing comment says so ok")
+
+        # a whole video's comments at once, with next / previous
+        t = lambda n: {"h": f"fan{n}", "t": f"quit again for a couple days but came back to it, my phone wins {n}"}
+        pg = jump({"f": "fan10", "c": [t(30), t(3), t(10), {"h": "ghost", "t": "never wrote this"}]})
+        pg.wait_for_function("document.documentElement.innerText.includes('comment 2 of 3')", timeout=90000)
+        lit = pg.evaluate("[...document.querySelectorAll('[data-e2e=\"comment-level-1\"]')].filter(e => e.style.outline).map(e => e.innerText.slice(-2).trim())")
+        assert lit == ["3", "10", "30"], lit  # all three highlighted, in page order; the first to show was fan10 (2nd)
+        assert "1 not found" in pg.evaluate("document.documentElement.innerText")
+        pg.click("button[title='Next comment']")
+        assert "comment 3 of 3" in pg.evaluate("document.documentElement.innerText")
+        pg.click("button[title='Next comment']")
+        assert "comment 1 of 3" in pg.evaluate("document.documentElement.innerText")
+        pg.click("button[title='Previous comment']")
+        assert "comment 3 of 3" in pg.evaluate("document.documentElement.innerText")
+        print("group of comments: all found, stepping between them ok")
         b.close()
 
 

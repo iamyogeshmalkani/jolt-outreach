@@ -4,7 +4,7 @@ export const DEFAULTS = {
   repo: 'iamyogeshmalkani/jolt-outreach',
   token: '',          // a GitHub token limited to this one repo (Contents: Read and write)
   auto: false,        // also look for people every hour; off by default, runs are started by hand
-  videosPerRun: 20,   // how many videos one run reads
+  videosPerRun: 100,   // how many videos one run reads
   paused: false,      // set automatically when TikTok asks for a login or verification
   competitors: DEFAULT_COMPETITORS, // apps to search for and to mark people who mention them; edited in Settings
   keywords: DEFAULT_KEYWORDS,       // topic searches, e.g. "phone addiction"; edited in Settings

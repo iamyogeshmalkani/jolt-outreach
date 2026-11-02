@@ -68,7 +68,9 @@ export function mentionsCompetitor(text, names) {
 
 // A run is started by hand, a few times a day, so it can be long. How many videos it reads is a setting (videosPerRun).
 export const LIMITS = {
-  targetPeople: 40,  // a run stops once it has this many people
+  targetPeople: 300, // a run stops once it has this many people (it normally ends by reading its videos)
+  topComments: 50,   // only the first this-many comments of each video are read (TikTok lists the top ones first)
+  maxVideos: 100,    // the most videos one run may read
   minComments: 2,    // a video with fewer comments than this is flagged and skipped
   regrow: 5,         // a video read before is read again only once it has this many more comments
   maxFails: 5,       // videos in a row that fail to open or load before the run gives up

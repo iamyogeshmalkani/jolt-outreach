@@ -82,10 +82,10 @@ test('stops cleanly on a verification check and keeps what it already found', as
 })
 
 test('stops after the target number of people', async () => {
-  const cards = [card(1), card(2), card(3), card(4)]
+  const cards = Array.from({ length: 11 }, (_, i) => card(i + 1))
   const comments = Object.fromEntries(cards.map((c, ci) => [c.url, { ok: true, rows: Array.from({ length: 30 }, (_, i) => ({ handle: `person${ci}_${i}`, text: 'Quit again for a couple days but unfortunately came back to it.' })) }]))
   const out = await findPeople(fakeBrowser({ cards, comments }), empty(), seen(), undefined, judge)
-  assert.equal(out.people.length, 40)
+  assert.equal(out.people.length, 300)
 })
 
 test('only the comments the AI picks become people, and it sees only comments that passed the cheap checks', async () => {

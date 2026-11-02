@@ -5,7 +5,7 @@ import { clickCard, closeVideo, readCommentIds, readCommentsPage, readGuard, rea
 import { DEFAULTS } from './lib/settings.js'
 import { Stop, backfillCommentIds, findPeople } from './lib/tasks.js'
 import { improve, pickRelevant } from './lib/llm.js'
-import { attachIds, competitorNames } from './lib/rules.js'
+import { LIMITS, attachIds, competitorNames } from './lib/rules.js'
 
 const store = chrome.storage.local
 const getSettings = async () => ({ ...DEFAULTS, ...((await store.get('settings')).settings || {}) })
@@ -75,7 +75,7 @@ function makeBrowser(tabId) {
     },
     closeVideo: () => exec(tabId, closeVideo),
     async comments() {
-      const page = await exec(tabId, readCommentsPage)
+      const page = await exec(tabId, readCommentsPage, [LIMITS.topComments])
       if (!page?.ok) return page
       // Comment links are a bonus: if the ids cannot be read, the run goes on without them.
       const ids = await exec(tabId, readCommentIds, [], 'MAIN').catch(() => [])
@@ -108,6 +108,7 @@ async function run(manual, delayMs = 0) {
     await log('Started: finding people')
     const cfg = { repo: s.repo.trim(), token: s.token.trim(), ...(s.api ? { api: s.api } : {}) } // `api` is only set by tests
     const known = await fetchKnown(cfg)
+    if (!known.handles.size) await store.remove(['seen', 'videos']) // nothing is published, so start over: forget the people and videos this browser remembered
     for (const h of s.skip.split(/\s+/).filter(Boolean)) known.handles.add(h.toLowerCase().replace(/^@/, ''))
     const { seen: saved = {} } = await store.get('seen')
     const seen = { handles: new Set(saved.handles || []) }
@@ -122,7 +123,7 @@ async function run(manual, delayMs = 0) {
       result = await findPeople(browser, known, seen, log, (rows) => pickRelevant(ai, rows, { names: competitorNames(s.competitors), log }), {
         competitors: s.competitors,
         keywords: s.keywords,
-        videos: Math.min(60, Math.max(1, Math.round(Number(s.videosPerRun)) || DEFAULTS.videosPerRun)),
+        videos: Math.min(LIMITS.maxVideos, Math.max(1, Math.round(Number(s.videosPerRun)) || DEFAULTS.videosPerRun)),
         memory,
       })
     } finally {

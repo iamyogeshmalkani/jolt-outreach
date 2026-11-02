@@ -14,15 +14,17 @@ export type Item = {
   note?: string
   source: string
   sourceUrl: string        // the video they commented on
-  commentUrl: string       // the video, opened so the Jolt finder extension scrolls to their comment and highlights it
+  commentUrl: string       // the video, opened so the Jolt finder extension finds all saved comments on it, starting with theirs
+  sameVideo: number        // how many saved comments are on that video
   profileUrl: string
 }
 
-// The video's address plus a note of whose comment to find. The finder extension reads the note, scrolls the comments until it
-// shows, and highlights it. Without the extension it is simply the video. The note carries only the start of the comment.
-export function commentLink(p: Pick<Person, 'url' | 'handle' | 'comment'>): string {
-  const note = JSON.stringify({ h: p.handle, t: p.comment.replace(/\s+/g, ' ').trim().slice(0, 60) })
-  return `${p.url}#jolt=${encodeURIComponent(note)}`
+// The video's address plus a note of every saved comment on that video and which one to show first. The finder extension reads the
+// note, scrolls the comments until they show, highlights them all, and lets you step from one to the next. Without the extension
+// it is simply the video. The note carries only the start of each comment.
+export function commentLink(p: Pick<Person, 'url' | 'handle' | 'comment'>, all: Pick<Person, 'url' | 'handle' | 'comment'>[]): string {
+  const c = all.filter((q) => q.url === p.url).map((q) => ({ h: q.handle, t: q.comment.replace(/\s+/g, ' ').trim().slice(0, 50) }))
+  return `${p.url}#jolt=${encodeURIComponent(JSON.stringify({ f: p.handle, c }))}`
 }
 
 // {ME} is your first name, {NAME} is the person you are writing to.
@@ -44,7 +46,8 @@ export function buildItems(people: Person[], cfg: Config, creators: Record<strin
     note: p.note || undefined,
     source: p.source,
     sourceUrl: p.url,
-    commentUrl: commentLink(p),
+    commentUrl: commentLink(p, people),
+    sameVideo: people.filter((q) => q.url === p.url).length,
     profileUrl: `https://www.tiktok.com/@${p.handle}`,
   }))
 }
