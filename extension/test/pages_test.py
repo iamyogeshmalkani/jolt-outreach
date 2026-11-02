@@ -79,6 +79,26 @@ def main():
         assert info["opened"] is False and info["caption"] == "" and info["markers"] == ["something-new", "browse-music"], info
         assert page.evaluate(fn("readCommentsPage")) == {"ok": False, "rows": []}
         print("nothing opened lists the page's elements:", info["markers"])
+
+        # the Comment link: open the video with a note of whose comment, and the content script finds it
+        import json, urllib.parse
+        CONTENT = (Path(__file__).parent.parent / "content.js").read_text(encoding="utf-8")
+        def jump(note):
+            pg = b.new_page()
+            pg.route("**/*", lambda r: r.fulfill(status=200, content_type="text/html", body=search_html()))
+            pg.goto("https://www.tiktok.com/@maker1/video/1#jolt=" + urllib.parse.quote(json.dumps(note), safe=""))
+            pg.evaluate(fn("clickCard", "'/@maker1/video/1'"))
+            pg.evaluate(fn("readOpenVideo"))
+            pg.evaluate(CONTENT)
+            return pg
+        pg = jump({"h": "fan30", "t": "quit again for a couple days but came back to it, my phone wins 30"})
+        pg.wait_for_function("document.documentElement.innerText.includes('Jolt: found')", timeout=60000)
+        hit = pg.evaluate("[...document.querySelectorAll('[data-e2e=\"comment-level-1\"]')].filter(e => e.style.outline).map(e => e.innerText)")
+        assert hit == ["Quit again for a couple days but came back to it, my phone wins 30"], hit
+        print("jump to a comment far down the list ok")
+        pg = jump({"h": "fan3", "t": "this comment does not exist"})
+        pg.wait_for_function("document.documentElement.innerText.includes('could not find')", timeout=90000)
+        print("a missing comment says so ok")
         b.close()
 
 

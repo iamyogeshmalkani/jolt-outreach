@@ -14,8 +14,15 @@ export type Item = {
   note?: string
   source: string
   sourceUrl: string        // the video they commented on
-  commentUrl?: string      // jumps to their comment on that video, when its id is known
+  commentUrl: string       // the video, opened so the Jolt finder extension scrolls to their comment and highlights it
   profileUrl: string
+}
+
+// The video's address plus a note of whose comment to find. The finder extension reads the note, scrolls the comments until it
+// shows, and highlights it. Without the extension it is simply the video. The note carries only the start of the comment.
+export function commentLink(p: Pick<Person, 'url' | 'handle' | 'comment'>): string {
+  const note = JSON.stringify({ h: p.handle, t: p.comment.replace(/\s+/g, ' ').trim().slice(0, 60) })
+  return `${p.url}#jolt=${encodeURIComponent(note)}`
 }
 
 // {ME} is your first name, {NAME} is the person you are writing to.
@@ -37,7 +44,7 @@ export function buildItems(people: Person[], cfg: Config, creators: Record<strin
     note: p.note || undefined,
     source: p.source,
     sourceUrl: p.url,
-    commentUrl: p.commentId ? `${p.url}?comment_id=${p.commentId}` : undefined,
+    commentUrl: commentLink(p),
     profileUrl: `https://www.tiktok.com/@${p.handle}`,
   }))
 }
