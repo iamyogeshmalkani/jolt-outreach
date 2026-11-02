@@ -1,4 +1,3 @@
-import { PROVIDERS, modelOf } from './lib/llm.js'
 import { DEFAULTS } from './lib/settings.js'
 
 const $ = (id) => document.getElementById(id)
@@ -12,7 +11,7 @@ async function render() {
 
   let state = 'Idle.'
   if (!s.token) state = 'Add your GitHub token in Settings to start.'
-  else if (status.running) state = 'Working. A small Chrome window is open, so leave it alone.'
+  else if (status.running) state = 'Finding videos. A small Chrome window is open, so leave it alone.'
   else if (status.message) state = status.message
   else if (status.lastRun) state = `Last run ${new Date(status.lastRun.at).toLocaleTimeString()}.`
   $('state').textContent = state
@@ -21,22 +20,14 @@ async function render() {
   $('error').textContent = status.error || ''
   $('resume').hidden = !s.paused
   $('auto').checked = s.auto
-  const who = `${PROVIDERS[s.aiProvider]?.label ?? 'AI'} (${modelOf({ provider: s.aiProvider, model: s.aiModel })})`
-  $('claude').textContent = !s.aiKey
-    ? 'Add an AI key in Settings. It picks which comments are really about a habit.'
-    : s.useAi
-      ? `${who} picks the comments and writes the opening lines.`
-      : `${who} picks the comments. Opening lines use the built-in templates.`
   $('hours').textContent = s.auto
     ? `Also runs by itself between ${s.startHour}:00 and ${s.endHour}:00 while Chrome is open.`
-    : `Each run reads up to ${s.videosPerRun} videos. Start one by hand 2 or 3 times a day.`
+    : `Each run checks up to ${s.videosPerRun} videos. Start one by hand 2 or 3 times a day.`
   $('people').disabled = Boolean(status.running)
-  $('backfill').disabled = Boolean(status.running)
   $('log').textContent = log.join('\n') || 'Nothing yet.'
 }
 
 $('people').onclick = () => send({ type: 'run' })
-$('backfill').onclick = () => send({ type: 'backfill' })
 $('resume').onclick = () => send({ type: 'resume' })
 $('auto').onchange = async (e) => {
   const { settings = {} } = await chrome.storage.local.get('settings')

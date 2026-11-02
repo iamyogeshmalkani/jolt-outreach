@@ -1,18 +1,21 @@
 # Jolt outreach
 
-Find people on TikTok who describe their own screen-time struggle, write a personal opening line
-for each, and work through them in a simple page. You send every message yourself.
+Find recent, popular TikTok videos on your topics and list their links in a simple page. You open each
+video and look through its comments yourself, then mark it complete so it is never found again.
 
 **Live page:** https://iamyogeshmalkani.github.io/jolt-outreach/
 
 It has two parts, and nothing to run in a terminal:
 
 - **The Jolt finder** is a Chrome extension. It runs in your own Chrome, where you are already
-  logged into TikTok, and only reads pages: it opens a small TikTok window, reads the comments of a few
-  popular videos about screen time, and saves the people it finds to the `data` branch of this repo.
-- **The page** is hosted on GitHub. It reads the `data` branch and shows one conversation at a
-  time, with a copy button and a suggested next step. Statuses (sent, replied, booked) are saved in
-  your own browser.
+  logged into TikTok, and only reads pages: it searches TikTok for the topics you list in Settings,
+  opens the most-viewed recent results to check their comment count, and saves the ones that qualify to
+  the `data` branch of this repo. It does not read comments and uses no AI.
+- **The page** is hosted on GitHub. It reads the `data` branch and lists the videos, each with an
+  **Open video** link, **Copy link** and **Mark complete**.
+
+A video is listed when it was posted in the last 60 days, has at least 10,000 views and at least 20
+comments. All three numbers, and the topics, are in the extension's **Settings**.
 
 ## Set up the extension (once, about 3 minutes)
 
@@ -24,46 +27,25 @@ It has two parts, and nothing to run in a terminal:
    select repositories**, pick `jolt-outreach`, and under **Repository permissions** set
    **Contents** to **Read and write**.
 4. Click the extension, open **Settings**, paste the token, and choose **Save and check**.
-5. Click the extension and choose **Find people now** to try it.
+5. Click the extension and choose **Find videos now** to try it.
 
-After that, start a run by hand 2 or 3 times a day with **Find people now**. A run reads up to 20 videos
-(changeable in Settings, "Videos per run"), takes about 20 seconds per video, and keeps up to 40 people.
-A small Chrome window appears during the run. Leave it alone. The page picks up new people within about
-5 minutes. Videos with fewer than 2 comments are skipped, and a video already read is skipped until it
-has 5 or more new comments, so each run spends its time on videos with something new. If you would
-rather have it run by itself, tick **Also run by itself every hour** in the popup.
+After that, start a run by hand when you want more videos. A run opens up to 100 videos to check them
+(changeable in Settings), takes about 15 seconds per video, and keeps up to 40. A small Chrome window
+appears during the run. Leave it alone. The page picks up new videos within about 5 minutes. If you
+would rather have it run by itself, tick **Also run by itself every hour** in the popup.
 
 The token stays in your Chrome and is only ever sent to GitHub. It can only touch this one repo.
 
+- **Age** comes from the video's number: a TikTok video number contains the time it was posted, so
+  old videos are skipped without opening them. TikTok's search can't be sorted by newest, so a search
+  may turn up few recent videos.
+- **Mark complete** on the page saves the video to `videos_done.json`, and the finder never lists it
+  again. For that the page needs the same kind of GitHub token (page **Settings**, kept in that browser).
+  Without a token it only hides the video in that browser.
 - If TikTok shows a verification check or you are logged out, the run stops, says why, and any
   automatic runs pause. Fix it in Chrome and choose **Resume automatic runs**.
 - Run the extension in **one** Chrome. It merges with what is already published, so a second one
   would not lose data, but the two would not know about each other's recent finds.
-- If a publish fails (no internet, or the token expired) it says so in the popup. Nothing is queued
-  to retry: the next run finds new things.
-
-## Optional: opening lines written by AI
-
-Without this, the first line of each message comes from a few built-in templates, picked by words in
-the person's comment. With an API key, an AI model writes it from what the person actually said. Two
-providers are supported:
-
-- **Groq, the default.** Get a key at console.groq.com/keys. Default model `openai/gpt-oss-20b`. Check your
-  account's limits page for what the free plan allows. Signup may or may not ask for a card.
-- **Claude (Anthropic).** Get a key at platform.claude.com, in a workspace with a low monthly spend limit.
-  It is billed to your Anthropic account, separately from any Claude.ai plan. Default model `claude-haiku-5-5`.
-
-In the extension's **Settings**, choose the provider, paste the key and choose **Save and check**. It
-makes one tiny real request, so a wrong key, model or an empty quota shows up straight away. The model
-box can stay empty to use the default.
-
-Each run sends one request for all its opening lines. Only the public text of each comment is sent.
-The key stays in your Chrome and is only sent to that provider.
-
-The model's text is checked against the same rules as the templates: no links, no company names, a
-sensible length. Anything that fails the check, or any error (wrong key, quota or spend limit reached,
-no internet), quietly falls back to the built-in line, and the popup's log says why. A run never fails
-because of the AI.
 
 ## The Reddit extension
 
@@ -134,45 +116,24 @@ dashboard, when you come back to the dashboard tab, and with **Sync now**.
 
 ## What gets published
 
-The live page and the `data` branch are public. The `data` branch holds the TikTok handles and
-public comments of the people it finds, the newest 300 people. The page asks search
-engines not to index it. To have someone removed, open an issue with their handle.
-Mental-health and medication comments, anyone who looks under 18, brand accounts and promo codes
-are filtered out before anything is saved.
+The live page and the `data` branch are public. The `data` branch holds only public TikTok video links
+with their caption, creator name and counts (the newest 500 videos), plus the list of videos marked
+complete. The page asks search engines not to index it.
 
-## How it decides
-
-- **People:** comments that describe the commenter's own experience (first person plus a
-  screen-time word). Comments that name a specific app or experience are marked "Specific" and sorted first.
-
-The rules are in `extension/lib/rules.js`. The search phrases and run sizes are there too.
+The rules are in `extension/lib/rules.js` and the run logic in `extension/lib/tasks.js`.
 
 ## Please read
 
 - **TikTok's terms.** Automating a logged-in account, even only to read pages, is against TikTok's
   terms of service and can get that account restricted. Use a spare account and keep volume low.
   Don't send messages with a tool.
-- **People are real.** Message each person individually, be honest about who you are and why you're
-  asking, and drop anyone who says no. Don't contact anyone under 18.
-- **TikTok changes its pages.** The extension reads captions and comments using TikTok's current page
-  markup. If the popup's log says it couldn't read a caption, the selectors in
+- **TikTok changes its pages.** The extension reads search results and counts using TikTok's current page
+  markup. If the popup's log says it couldn't open a video, the selectors in
   `extension/lib/pages.js` need updating.
-
-## Alternative: run it from a terminal
-
-`jolt_outreach.py` does the same job in Python, with its own Chrome profile, and publishes to the same
-`data` branch. You need Python 3.9+, Node 20+ and `git` access to this repo.
-
-    npm install && npm run setup
-    npm run login       # log into TikTok in the window that opens
-    npm run find        # about 20 people to message
-    npm run dev         # the page on your computer, reading ~/jolt_outreach
-
-Use one or the other, not both. Add `--no-publish` to keep results on your computer only.
 
 ## Tests
 
-    npm run test:extension                          # rules, GitHub saving, AI opening lines and run logic
+    npm run test:extension                          # rules, GitHub saving and run logic
     .venv/bin/python extension/test/pages_test.py   # page readers against mock TikTok pages
     .venv/bin/python extension/test/extension_e2e.py  # loads the extension in Chromium, mocks TikTok and GitHub (~2 min)
 
@@ -182,10 +143,7 @@ touch real TikTok.
 ## Layout
 
 - `reddit-extension/` the Reddit extension (its tests: `npm run test:reddit`, and `test/e2e.py`)
-- `extension/` the Chrome extension (`lib/rules.js` filters, `lib/tasks.js` what a run does,
-  `lib/pages.js` what is read from TikTok pages, `lib/github.js` saving, `lib/llm.js` the optional
-  AI opening lines)
+- `extension/` the Chrome extension (`lib/rules.js` searches and limits, `lib/tasks.js` what a run does,
+  `lib/pages.js` what is read from TikTok pages, `lib/github.js` saving)
 - `src/` the page, `.github/workflows/pages.yml` publishes it and the extension download
-- `jolt_outreach.py`, `scripts/py.mjs` the Python alternative
-
-Shortcuts on the page: `J` and `K` move through the list, `C` copies the reply.
+- `jolt_outreach.py`, `scripts/py.mjs`, `server/` the older Python finder for people, no longer used by the page

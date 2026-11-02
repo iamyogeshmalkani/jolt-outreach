@@ -1,20 +1,4 @@
-// The rules for who and what is worth reaching out to. A port of the filters in jolt_outreach.py.
-
-export const MINOR =
-  /high ?school|middle ?school|\bgrade \d+|\d+(st|nd|rd|th) grade|freshman|sophomore|my (mom|mum|dad|parents)|i'?m (1[0-7])\b|\b1[0-7] ?(yo|y\/o|years? old)|homework|teacher/i
-// Crisis topics only. Everyday mental-health words (anxiety, depression, therapy, trauma, panic, medication, coping) are allowed through
-// to the AI, because people often describe their phone habit that way. Messaging someone who is writing about self-harm, suicide, an
-// eating disorder or abuse is never appropriate, so those stay blocked here and the AI is told to reject them too.
-export const SENSITIVE =
-  /suicid|kill myself|self.?harm|cutting myself|cut myself|cutting my (wrists?|arms?|legs?|thighs?|skin)|anorex|bulimi|eating disorder|overdose|abus/i
-export const SEXUAL = /\b(sex|nsfw|onlyfans|nude|horny)\b/i
-export const BRAND_HANDLE = /(app|official|\.io|promo|deals|steals|coupon|bot|shop|store|ugc|agency)/i
-// No "i" flag, on purpose: the code pattern only matches upper-case codes.
-export const PROMO = /https?:\/\/|www\.|use my code|referral|promo|(?=[A-Z0-9]*\d)(?=[A-Z0-9]*[A-Z])\b[A-Z0-9]{6,9}\b/
-// Phrases that show someone has already tried to fix this. Mentioning a competitor (see mentionsCompetitor) counts too.
-export const PRIORITY_A =
-  /stopped working|didn'?t work|only worked|worked for|came back|relapse|tried|ignore|bypass|5 more minutes|can'?t figure|don'?t know how|how (do|can) (i|you)|\d+ ?(hrs|hours)/i
-export const STUDY = /\b(study|studying|exam|exams|class|classes|school)\b/i
+// What the finder searches for, and the limits of a run. The searches come from Settings.
 
 // The apps people compare us with, in three groups. The user can change these lists in Settings.
 export const COMPETITOR_GROUPS = [
@@ -58,32 +42,28 @@ export const buildQueries = (competitors = DEFAULT_COMPETITORS, keywords = DEFAU
 ]
 export const QUERIES = buildQueries()
 
-const escapeRx = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-// True when the text names one of the competitors as a whole word, ignoring case and spacing ("one sec", "onesec").
-export function mentionsCompetitor(text, names) {
-  if (!names.length) return false
-  const body = names.map((n) => n.trim().split(/\s+/).map(escapeRx).join('\\s*')).join('|')
-  return new RegExp(`(?<![a-z0-9])(?:${body})(?![a-z0-9])`, 'i').test(text || '')
+// Technical limits of a run. What counts as a good video (age, views, comments) is a setting, see settings.js.
+export const LIMITS = {
+  maxVideos: 100,    // the most videos one run may open
+  targetVideos: 40,  // a run stops once it has found this many
+  maxFails: 5,       // videos in a row that fail to open before the run gives up
+  rejectDays: 7,     // a video with too few comments is not opened again for this long
+  maxFound: 500,     // the most videos kept in the list
 }
 
-// A run is started by hand, a few times a day, so it can be long. How many videos it reads is a setting (videosPerRun).
-export const LIMITS = {
-  targetPeople: 300, // a run stops once it has this many people (it normally ends by reading its videos)
-  topComments: 50,   // only the first this-many comments of each video are read (TikTok lists the top ones first)
-  maxAgeDays: 60,    // only videos posted in the last two months are read
-  maxVideos: 100,    // the most videos one run may read
-  minComments: 2,    // a video with fewer comments than this is flagged and skipped
-  regrow: 5,         // a video read before is read again only once it has this many more comments
-  maxFails: 5,       // videos in a row that fail to open or load before the run gives up
-  maxPeople: 300,
-}
+// A video's number: the part of its address that never changes, even if the creator renames their account.
+export const videoKey = (url) => (/\/video\/(\d+)/.exec(String(url || '')) || [])[1] || String(url || '')
 
 // When a TikTok video was posted. Its id starts with the posting time (seconds since 1970, shifted left 32 bits), so no page needs
-// opening. Returns days old, or null when the address has no readable id (then the video is not filtered out).
-export function videoAgeDays(url, now = Date.now()) {
+// opening. Returns null when the address has no readable id.
+export function videoPosted(url) {
   const id = (/\/video\/(\d{18,20})/.exec(String(url || '')) || [])[1]
-  if (!id) return null
-  return (now - Number(BigInt(id) >> 32n) * 1000) / 86_400_000
+  return id ? new Date(Number(BigInt(id) >> 32n) * 1000).toISOString() : null
+}
+// Days since the video was posted, or null when unknown (then the video is not filtered out by age).
+export function videoAgeDays(url, now = Date.now()) {
+  const at = videoPosted(url)
+  return at ? (now - Date.parse(at)) / 86_400_000 : null
 }
 
 // TikTok shows counts like "40", "1,234", "1.2K" or "3M".
@@ -93,72 +73,6 @@ export function parseCount(text) {
   const num = parseFloat(m[2] ? m[1].replace(',', '.') : m[1].replace(/,/g, ''))
   if (Number.isNaN(num)) return null
   return Math.round(num * ({ K: 1e3, M: 1e6, B: 1e9 }[(m[2] || '').toUpperCase()] || 1))
-}
-
-const OPENERS = [
-  [/can'?t stop|cant stop|can’t stop|cannot stop/i, 'Saw your comment about not being able to stop scrolling.'],
-  [/how (do|can) (i|you)/i, 'Saw you asking how to actually break the scrolling habit.'],
-  [/stopped working|didn'?t work|only worked|worked for|tried/i, 'Saw your comment about trying to fix this and it not sticking.'],
-  [/quit|delet/i, "Saw your comment about quitting or cutting back. How's that going?"],
-  [/bored/i, 'Your comment about boredom and scrolling really stuck with me.'],
-  [/focus|distract|study/i, 'Saw your comment about phone time getting in the way of focus.'],
-  [/\d+ ?(hrs|hours)|hours/i, 'Saw your comment about how many hours you spend on your phone.'],
-]
-
-// The cheap checks that run before any AI sees a comment: who wrote it, how long it is, and what must never be contacted.
-// Whether the comment is really about the person's own habit is decided by the AI (llm.js, pickRelevant).
-export function isCandidate(handle, text, creator) {
-  const t = (text || '').trim()
-  if (!handle || handle.toLowerCase() === (creator || '').toLowerCase()) return false
-  if (t.length < 20 || t.length > 280) return false
-  if (BRAND_HANDLE.test(handle) || PROMO.test(t)) return false
-  if (MINOR.test(t) || SENSITIVE.test(t) || SEXUAL.test(t)) return false
-  return true
-}
-
-export const priority = (text, names = competitorNames()) => (PRIORITY_A.test(text) || mentionsCompetitor(text, names) ? 'A' : 'B')
-
-export function opener(text) {
-  for (const [rx, line] of OPENERS) if (rx.test(text)) return line
-  let snippet = text.trim().replace(/\n/g, ' ')
-  if (snippet.length > 70) snippet = snippet.slice(0, 70).replace(/ [^ ]*$/, '') + '…'
-  return `Saw your comment: “${snippet}”`
-}
-
-// Adds each comment's id (read separately from the page) to its row, matching on who wrote it and what it says.
-export function attachIds(rows, ids) {
-  const key = (x) => `${x.handle}\n${x.text}`
-  const byKey = new Map((ids || []).filter((x) => x?.id).map((x) => [key(x), x.id]))
-  return rows.map((row) => (byKey.has(key(row)) ? { ...row, id: byKey.get(key(row)) } : row))
-}
-
-// Fills in the comment id for saved people who lack one, from comments freshly read off their video (rows carry `id`).
-// A person is matched only on who wrote it and exactly what it says; no match means no id, never a guess.
-export function fillCommentIds(people, rows) {
-  const norm = (s) => String(s ?? '').replace(/\s+/g, ' ').trim().toLowerCase()
-  const byKey = new Map((rows || []).filter((x) => x?.id).map((x) => [`${norm(x.handle)}\n${norm(x.text)}`, x.id]))
-  return people.map((p) => {
-    if (p.commentId) return p
-    const id = byKey.get(`${norm(p.handle)}\n${norm(p.comment)}`)
-    return id ? { ...p, commentId: id } : p
-  })
-}
-
-// ---- the shape saved to people.json (what the page reads) ----
-// `runAt` is the same for everyone a run finds; the page tags the people from the latest run as New.
-export function makePerson(row, { creator, query, url, runAt, names }, today) {
-  return {
-    handle: row.handle,
-    comment: row.text,
-    priority: priority(row.text, names),
-    source: `${query} · @${creator}`,
-    url,
-    note: STUDY.test(row.text) ? "Mentions studying. Confirm they're 18+ before booking." : '',
-    opener: opener(row.text),
-    ...(row.id ? { commentId: row.id } : {}),
-    added: today,
-    found: runAt,
-  }
 }
 
 // ---- helpers ----
@@ -192,9 +106,4 @@ export function pickRunQueries(competitors, keywords, n, seed = hourSeed()) {
   const fromC = Math.min(c.length, Math.ceil(n / 2))
   const fromK = Math.min(k.length, n - fromC)
   return [...pickQueries(c, fromC, seed), ...pickQueries(k, fromK, seed + 1)]
-}
-
-export function todayIso(d = new Date()) {
-  const p = (n) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }

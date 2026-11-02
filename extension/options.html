@@ -24,9 +24,8 @@
     </section>
 
     <section>
-      <h2>What to search for</h2>
-      <p class="hint">Each run searches TikTok for one competitor and one keyword, then reads the comments of the videos it finds.
-        One entry per line. People who mention a competitor are tagged Specific.</p>
+      <h2>Topics to search for</h2>
+      <p class="hint">Each run searches TikTok for these topics and keeps the recent, popular videos. One entry per line.</p>
       <label>Keywords <span class="hint">(searched as typed, e.g. phone addiction)</span>
         <textarea id="keywords" rows="8" autocomplete="off"></textarea>
       </label>
@@ -43,11 +42,20 @@
     </section>
 
     <section>
-      <h2>How much a run reads</h2>
-      <label>Videos per run <span class="hint">(a run takes about 20 seconds per video)</span>
+      <h2>What counts as a good video</h2>
+      <label>Posted within the last (days)
+        <input id="maxAgeDays" type="number" min="1" max="365" />
+      </label>
+      <label>At least this many views <span class="hint">(popular ones)</span>
+        <input id="minViews" type="number" min="0" step="1000" />
+      </label>
+      <label>At least this many comments
+        <input id="minComments" type="number" min="0" />
+      </label>
+      <label>Videos to check per run <span class="hint">(a run takes about 15 seconds per video)</span>
         <input id="videosPerRun" type="number" min="1" max="100" />
       </label>
-      <p class="hint">Videos with fewer than 2 comments are skipped, and so are videos read before that have not got 5 or more new comments.</p>
+      <p class="hint">The comment count is only known once a video is opened, so a run opens the most-viewed results of each search first.</p>
     </section>
 
     <section>
@@ -57,31 +65,6 @@
         <label>From hour <input id="startHour" type="number" min="0" max="23" /></label>
         <label>Until hour <input id="endHour" type="number" min="1" max="24" /></label>
       </div>
-    </section>
-
-    <section>
-      <h2>People to skip</h2>
-      <label>Handles you already contacted
-        <textarea id="skip" rows="4" placeholder="one handle per line, or separated by spaces"></textarea>
-      </label>
-    </section>
-
-    <section>
-      <h2>AI (needed to find people)</h2>
-      <label>Provider
-        <select id="aiProvider">
-          <option value="groq">Groq (gpt-oss-20b)</option>
-          <option value="anthropic">Claude (Anthropic)</option>
-        </select>
-      </label>
-      <label>API key
-        <input id="aiKey" type="password" autocomplete="off" />
-      </label>
-      <label>Model <span class="hint">(leave empty for the default)</span>
-        <input id="aiModel" autocomplete="off" />
-      </label>
-      <label class="check"><input id="useAi" type="checkbox" /> Also use it to write the opening line of each message</label>
-      <p class="hint" id="aiHint"></p>
     </section>
 
     <div class="row">

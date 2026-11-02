@@ -1,11 +1,10 @@
-// Runs the finder inside your own Chrome: opens a small TikTok window, reads results the way a person would,
-// and saves what it finds to the `data` branch of your GitHub repo, where the hosted page picks it up.
-import { publish, fetchKnown, readFile, updatePeople } from './lib/github.js'
-import { clickCard, closeVideo, readCommentIds, readCommentsPage, readGuard, readOpenVideo, readSearchCards } from './lib/pages.js'
+// Runs the finder inside your own Chrome: opens a small TikTok window, looks for recent popular videos on your topics the way a
+// person would, and saves the links to the `data` branch of your GitHub repo, where the hosted page picks them up.
+import { publishVideos, fetchKnown } from './lib/github.js'
+import { clickCard, closeVideo, readGuard, readOpenVideo, readSearchCards } from './lib/pages.js'
 import { DEFAULTS } from './lib/settings.js'
-import { Stop, backfillCommentIds, findPeople } from './lib/tasks.js'
-import { improve, pickRelevant } from './lib/llm.js'
-import { LIMITS, attachIds, competitorNames } from './lib/rules.js'
+import { Stop, findVideos } from './lib/tasks.js'
+import { LIMITS } from './lib/rules.js'
 
 const store = chrome.storage.local
 const getSettings = async () => ({ ...DEFAULTS, ...((await store.get('settings')).settings || {}) })
@@ -57,12 +56,6 @@ function makeBrowser(tabId) {
       await guard(cards.length > 0)
       return cards
     },
-    // Opens a video's own page directly (used to go back to videos already saved).
-    async visit(url) {
-      await navigate(tabId, url)
-      await sleep(3500)
-      await guard()
-    },
     // Click the result like a person would. If it is not on this page, open the video's own page instead.
     async openVideo(url) {
       const clicked = await exec(tabId, clickCard, [new URL(url).pathname])
@@ -74,13 +67,6 @@ function makeBrowser(tabId) {
       return exec(tabId, readOpenVideo)
     },
     closeVideo: () => exec(tabId, closeVideo),
-    async comments() {
-      const page = await exec(tabId, readCommentsPage, [LIMITS.topComments])
-      if (!page?.ok) return page
-      // Comment links are a bonus: if the ids cannot be read, the run goes on without them.
-      const ids = await exec(tabId, readCommentIds, [], 'MAIN').catch(() => [])
-      return { ...page, rows: attachIds(page.rows, ids) }
-    },
   }
 }
 
@@ -95,103 +81,50 @@ async function run(manual, delayMs = 0) {
     await patchStatus({ error: 'Add your GitHub token in Settings first.', running: false })
     return
   }
-  if (!s.aiKey.trim()) {
-    await patchStatus({ error: 'Add an AI key in Settings first. The AI picks which comments are really about a habit.', running: false })
-    return
-  }
   busy = true
   const keepAlive = setInterval(() => chrome.runtime.getPlatformInfo(), 20_000) // keeps Chrome from stopping this worker mid-run
   let win
   try {
     if (delayMs) await sleep(delayMs) // random timing, so hourly runs don't land on the exact minute
     await patchStatus({ running: true, error: '', message: '' })
-    await log('Started: finding people')
+    await log('Started: finding videos')
     const cfg = { repo: s.repo.trim(), token: s.token.trim(), ...(s.api ? { api: s.api } : {}) } // `api` is only set by tests
     const known = await fetchKnown(cfg)
-    if (!known.handles.size) await store.remove(['seen', 'videos']) // nothing is published, so start over: forget the people and videos this browser remembered
-    for (const h of s.skip.split(/\s+/).filter(Boolean)) known.handles.add(h.toLowerCase().replace(/^@/, ''))
-    const { seen: saved = {} } = await store.get('seen')
-    const seen = { handles: new Set(saved.handles || []) }
+    const { rejected: saved = {} } = await store.get('rejected')
+    const memory = { ...saved } // videos opened before and found to have too few comments; changed by the run
+    await store.remove(['seen', 'videos']) // left by older versions
 
     win = await chrome.windows.create({ url: 'about:blank', focused: false }) // no fixed size: a size that does not fit the screen is rejected
     const browser = makeBrowser(win.tabs[0].id)
-    const ai = { provider: s.aiProvider, key: s.aiKey.trim(), model: s.aiModel, ...(s.aiApi ? { api: s.aiApi } : {}) } // `aiApi` is only set by tests
-    const { videos: savedVideos = {} } = await store.get('videos')
-    const memory = { ...savedVideos } // videos read before, with their comment counts; changed by the run
     let result
     try {
-      result = await findPeople(browser, known, seen, log, (rows) => pickRelevant(ai, rows, { names: competitorNames(s.competitors), log }), {
+      result = await findVideos(browser, known, log, {
         competitors: s.competitors,
         keywords: s.keywords,
-        videos: Math.min(LIMITS.maxVideos, Math.max(1, Math.round(Number(s.videosPerRun)) || DEFAULTS.videosPerRun)),
+        checks: Math.min(LIMITS.maxVideos, Math.max(1, Math.round(Number(s.videosPerRun)) || DEFAULTS.videosPerRun)),
+        minComments: Number(s.minComments) || DEFAULTS.minComments,
+        minViews: Number.isFinite(Number(s.minViews)) ? Number(s.minViews) : DEFAULTS.minViews,
+        maxAgeDays: Number(s.maxAgeDays) || DEFAULTS.maxAgeDays,
         memory,
       })
     } finally {
-      const newest = Object.entries(memory).sort((a, b) => b[1].at - a[1].at).slice(0, 4000)
-      await store.set({ videos: Object.fromEntries(newest) })
+      const cutoff = Date.now() - LIMITS.rejectDays * 86_400_000
+      await store.set({ rejected: Object.fromEntries(Object.entries(memory).filter(([, v]) => v.at > cutoff).slice(-4000)) })
     }
 
-    const found = result.people.length
-    if (found && s.aiKey && s.useAi) {
-      await improve(ai, result, log)
-    }
-    if (found) await publish(cfg, result)
-    await store.set({ seen: { handles: [...seen.handles].slice(-3000) } })
+    const found = result.videos.length
+    if (found) await publishVideos(cfg, result.videos)
 
     if (result.stopped) {
       if (!manual) await store.set({ settings: { ...s, paused: true } })
-      await patchStatus({ error: result.stopped, message: found ? `Saved ${found} people before stopping.` : '' })
-    } else if (result.aiError) {
-      await patchStatus({ error: result.aiError, message: found ? `Saved ${found} people before the AI stopped answering.` : '' })
+      await patchStatus({ error: result.stopped, message: found ? `Saved ${found} videos before stopping.` : '' })
     } else {
-      await patchStatus({ message: found ? `Saved ${found} people. The page shows them within about 5 minutes.` : 'Nothing new found this time.' })
+      await patchStatus({ message: found ? `Saved ${found} videos. The page shows them within about 5 minutes.` : 'No new videos this time.' })
     }
     await patchStatus({ lastRun: { at: Date.now(), found } })
     chrome.action.setBadgeBackgroundColor({ color: '#b5fc4f' })
     chrome.action.setBadgeText({ text: found ? String(found) : '' })
-    await log(result.stopped ? `Stopped: ${result.stopped}` : result.aiError ? `Stopped: ${result.aiError}` : `Done: ${found} people`)
-  } catch (e) {
-    await patchStatus({ error: e.message || String(e) })
-    await log(`Failed: ${e.message || e}`)
-  } finally {
-    clearInterval(keepAlive)
-    if (win?.id !== undefined) chrome.windows.remove(win.id).catch(() => {})
-    await patchStatus({ running: false })
-    busy = false
-  }
-}
-
-// ------------------------------------------- comment links for saved people
-// People saved before comment links existed have no comment id. This opens each of their videos once, reads the ids, and saves them.
-async function backfill() {
-  if (busy) return
-  const s = await getSettings()
-  if (!s.token) {
-    await patchStatus({ error: 'Add your GitHub token in Settings first.', running: false })
-    return
-  }
-  busy = true
-  const keepAlive = setInterval(() => chrome.runtime.getPlatformInfo(), 20_000)
-  let win
-  try {
-    await patchStatus({ running: true, error: '', message: '' })
-    await log('Started: adding comment links to saved people')
-    const cfg = { repo: s.repo.trim(), token: s.token.trim(), ...(s.api ? { api: s.api } : {}) }
-    const { items } = await readFile(cfg, 'people.json')
-    const todo = items.filter((p) => !p.commentId && p.url).length
-    if (!todo) {
-      await patchStatus({ message: 'Everyone saved already has a comment link.' })
-      return
-    }
-    win = await chrome.windows.create({ url: 'about:blank', focused: false })
-    const result = await backfillCommentIds(makeBrowser(win.tabs[0].id), items, log)
-    if (result.filled) await updatePeople(cfg, result.people)
-    const rest = result.missing ? ` ${result.missing} could not be found (comment deleted, or too far down the video).` : ''
-    await patchStatus({
-      error: result.stopped,
-      message: `Added ${result.filled} comment links.${rest}${result.filled ? ' The page shows them within about 5 minutes.' : ''}`,
-    })
-    await log(result.stopped ? `Stopped: ${result.stopped}` : `Done: ${result.filled} links added`)
+    await log(result.stopped ? `Stopped: ${result.stopped}` : `Done: ${found} videos`)
   } catch (e) {
     await patchStatus({ error: e.message || String(e) })
     await log(`Failed: ${e.message || e}`)
@@ -229,7 +162,6 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'run') run(true)
-  if (msg.type === 'backfill') backfill()
   if (msg.type === 'resume') getSettings().then((s) => store.set({ settings: { ...s, paused: false } })).then(() => patchStatus({ error: '' }))
   if (msg.type === 'reschedule') chrome.alarms.clearAll().then(schedule)
 })

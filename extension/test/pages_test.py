@@ -56,15 +56,6 @@ def main():
         assert page.query_selector('[data-e2e="browse-video-desc"]') is None
         print("closeVideo ok")
 
-        # opened video: comments (top-level only), scrolled for more
-        page.evaluate(fn("clickCard", "'/@maker1/video/1'"))
-        page.evaluate(fn("readOpenVideo"))
-        got = page.evaluate(fn("readCommentsPage"))
-        assert got["ok"] and len(got["rows"]) > 8, len(got["rows"])
-        assert got["rows"][0] == {"handle": "fan0", "text": "Quit again for a couple days but came back to it, my phone wins 0"}, got["rows"][0]
-        assert not any("reply that must be ignored" in r["text"] for r in got["rows"])
-        print(f"readCommentsPage ok: {len(got['rows'])} comments, first = {got['rows'][0]}")
-
         # a video with no caption still counts as opened, and can be closed again
         page.set_content(search_html())
         assert page.evaluate(fn("clickCard", "'/@maker4/video/4'")) is True
@@ -77,43 +68,8 @@ def main():
         page.set_content('<body><a data-e2e="nav-foryou">x</a><div data-e2e="inbox-list">y</div><div data-e2e="something-new">x</div><div data-e2e="browse-music">m</div></body>')
         info = page.evaluate(fn("readOpenVideo"))
         assert info["opened"] is False and info["caption"] == "" and info["markers"] == ["something-new", "browse-music"], info
-        assert page.evaluate(fn("readCommentsPage")) == {"ok": False, "rows": []}
         print("nothing opened lists the page's elements:", info["markers"])
 
-        # the Comment link: open the video with a note of whose comment, and the content script finds it
-        import json, urllib.parse
-        CONTENT = (Path(__file__).parent.parent / "content.js").read_text(encoding="utf-8")
-        def jump(note):
-            pg = b.new_page()
-            pg.route("**/*", lambda r: r.fulfill(status=200, content_type="text/html", body=search_html()))
-            pg.goto("https://www.tiktok.com/@maker1/video/1#jolt=" + urllib.parse.quote(json.dumps(note), safe=""))
-            pg.evaluate(fn("clickCard", "'/@maker1/video/1'"))
-            pg.evaluate(fn("readOpenVideo"))
-            pg.evaluate(CONTENT)
-            return pg
-        pg = jump({"h": "fan30", "t": "quit again for a couple days but came back to it, my phone wins 30"})
-        pg.wait_for_function("document.documentElement.innerText.includes('comment 1 of 1')", timeout=60000)
-        hit = pg.evaluate("[...document.querySelectorAll('[data-e2e=\"comment-level-1\"]')].filter(e => e.style.outline).map(e => e.innerText)")
-        assert hit == ["Quit again for a couple days but came back to it, my phone wins 30"], hit
-        print("jump to a comment far down the list ok")
-        pg = jump({"h": "fan3", "t": "this comment does not exist"})
-        pg.wait_for_function("document.documentElement.innerText.includes('could not find')", timeout=90000)
-        print("a missing comment says so ok")
-
-        # a whole video's comments at once, with next / previous
-        t = lambda n: {"h": f"fan{n}", "t": f"quit again for a couple days but came back to it, my phone wins {n}"}
-        pg = jump({"f": "fan10", "c": [t(30), t(3), t(10), {"h": "ghost", "t": "never wrote this"}]})
-        pg.wait_for_function("document.documentElement.innerText.includes('comment 2 of 3')", timeout=90000)
-        lit = pg.evaluate("[...document.querySelectorAll('[data-e2e=\"comment-level-1\"]')].filter(e => e.style.outline).map(e => e.innerText.slice(-2).trim())")
-        assert lit == ["3", "10", "30"], lit  # all three highlighted, in page order; the first to show was fan10 (2nd)
-        assert "1 not found" in pg.evaluate("document.documentElement.innerText")
-        pg.click("button[title='Next comment']")
-        assert "comment 3 of 3" in pg.evaluate("document.documentElement.innerText")
-        pg.click("button[title='Next comment']")
-        assert "comment 1 of 3" in pg.evaluate("document.documentElement.innerText")
-        pg.click("button[title='Previous comment']")
-        assert "comment 3 of 3" in pg.evaluate("document.documentElement.innerText")
-        print("group of comments: all found, stepping between them ok")
         b.close()
 
 

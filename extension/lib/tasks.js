@@ -2,13 +2,11 @@
 // background.js supplies the real one:
 //   search(query) -> [{ url, caption, views, creator }]   the video results on the search page
 //   openVideo(url) -> { opened, caption, comments, markers }  opens one result over the search page; `comments` is its comment count
-//   comments() -> { ok, rows }                            the comments of the opened video
 //   closeVideo()                                          back to the results
 //   pause(a, b)                                           a short, random wait
-import { DEFAULT_COMPETITORS, DEFAULT_KEYWORDS, LIMITS, competitorNames, fillCommentIds, isCandidate, makePerson, parseCount, pickRunQueries, shuffled, todayIso, videoAgeDays } from './rules.js'
+import { DEFAULT_COMPETITORS, DEFAULT_KEYWORDS, LIMITS, parseCount, pickRunQueries, videoAgeDays, videoKey, videoPosted } from './rules.js'
 
 export class Stop extends Error {}
-class AiError extends Error {}
 
 const creatorOf = (url) => (/\/@([^/]+)\/video/.exec(url) || [])[1] || ''
 
@@ -18,44 +16,47 @@ async function notOpened(browser, creator, info, log) {
   await browser.closeVideo()
 }
 
-// Reads the comments of many videos and collects people who talk about the topic.
-//   judge(rows) -> rows   the AI's pick of the comments that are about the topic; it throws if it can't answer,
-//                         which ends the run (out.aiError) rather than saving comments nobody has checked
-//   competitors, keywords  what to search for: about half competitor searches and half keyword searches (see pickRunQueries)
-//   videos                 how many videos to read; up to twice as many are opened to find them
-//   memory                 { [videoUrl]: { n: comment count when last read, at } }, changed in place. A video with fewer than
-//                          LIMITS.minComments comments is flagged and skipped, and one read before is skipped until it has
-//                          LIMITS.regrow more comments, so a run spends its time on videos with something new.
-export async function findPeople(browser, known, seen, log = async () => {}, judge, { competitors = DEFAULT_COMPETITORS, keywords = DEFAULT_KEYWORDS, videos = 20, memory = {} } = {}) {
-  const out = { people: [], stopped: '', aiError: '' }
-  const today = todayIso()
+// Finds recent, popular videos on the topics. Nothing is read from the comments: a person looks through those by hand.
+// A video is kept when it was posted recently, has plenty of views, and has enough comments. Its comment count is only
+// known once it is opened, so the most-viewed results of each search are opened first.
+//   known     { keys: Set }  videos already in the list or marked complete (by video number); never found again
+//   memory    { [videoKey]: { n, at } } videos opened and found to have too few comments, changed in place, so they are not opened again soon
+//   checks    how many videos one run may open
+export async function findVideos(browser, known, log = async () => {}, {
+  competitors = DEFAULT_COMPETITORS, keywords = DEFAULT_KEYWORDS, checks = 100, minComments = 20, minViews = 10000, maxAgeDays = 60, memory = {},
+} = {}) {
+  const out = { videos: [], stopped: '' }
   const runAt = new Date().toISOString()
-  const names = competitorNames(competitors)
-  const maxOpens = videos * 2
-  const queries = pickRunQueries(competitors, keywords, Math.ceil(videos / 3))
-  const perQuery = Math.ceil(maxOpens / Math.max(1, queries.length))
-  let reads = 0
+  const queries = pickRunQueries(competitors, keywords, Math.ceil(checks / 4))
+  const perQuery = Math.ceil(checks / Math.max(1, queries.length))
   let opens = 0
   let fails = 0
-  const skipped = { few: 0, same: 0, old: 0 }
+  const skipped = { known: 0, old: 0, unpopular: 0, recent: 0, few: 0 }
   const tried = new Set() // two searches can return the same video; open it once per run
-  const finished = () => reads >= videos || opens >= maxOpens || out.people.length >= LIMITS.targetPeople || fails >= LIMITS.maxFails
+  const finished = () => opens >= checks || out.videos.length >= LIMITS.targetVideos || fails >= LIMITS.maxFails
   try {
     for (const query of queries) {
       if (finished()) break
       const cards = await browser.search(query)
-      await log(`Search "${query}": ${cards.length} results`)
-      let here = 0
-      for (const card of shuffled(cards)) {
-        if (here >= perQuery || finished()) break
-        if (tried.has(card.url)) continue
+      // Recent, popular and new to us; the most viewed first.
+      const pool = []
+      for (const card of cards) {
+        const key = videoKey(card.url)
         const age = videoAgeDays(card.url)
-        if (age !== null && age > LIMITS.maxAgeDays) {
-          tried.add(card.url)
-          skipped.old++
-          continue
-        }
-        tried.add(card.url)
+        const views = parseCount(card.views)
+        const before = memory[key]
+        if (tried.has(key) || known.keys.has(key)) skipped.known++
+        else if (age !== null && age > maxAgeDays) skipped.old++
+        else if (views !== null && views < minViews) skipped.unpopular++
+        else if (before && Date.now() - before.at < LIMITS.rejectDays * 86_400_000) skipped.recent++
+        else pool.push({ card, key, views })
+      }
+      pool.sort((a, b) => (b.views ?? -1) - (a.views ?? -1))
+      await log(`Search "${query}": ${cards.length} results, ${pool.length} recent and popular`)
+      let here = 0
+      for (const { card, key, views } of pool) {
+        if (here >= perQuery || finished()) break
+        tried.add(key)
         const creator = creatorOf(card.url)
         const info = await browser.openVideo(card.url)
         here++
@@ -65,98 +66,31 @@ export async function findPeople(browser, known, seen, log = async () => {}, jud
           await notOpened(browser, creator, info, log)
           continue
         }
-        const count = parseCount(info.comments)
-        const before = memory[card.url]
-        if (count !== null && count < LIMITS.minComments) {
-          skipped.few++
-          memory[card.url] = { n: count, at: Date.now() }
-          await log(`@${creator}: flagged, only ${count} comments`)
-          await browser.closeVideo()
-          await browser.pause(1, 3)
-          continue
-        }
-        if (count !== null && before && count < before.n + LIMITS.regrow) {
-          skipped.same++
-          await log(`@${creator}: nothing new (${count} comments, ${before.n} when last read)`)
-          await browser.closeVideo()
-          await browser.pause(1, 3)
-          continue
-        }
-        const page = await browser.comments()
-        if (!page?.ok) {
-          fails++
-          await log(`@${creator}: comments did not load`)
-          await browser.closeVideo()
-          continue
-        }
-        reads++
         fails = 0
-        const fresh = page.rows.filter((row) => {
-          const key = row.handle.toLowerCase()
-          return !known.handles.has(key) && !seen.handles.has(key) && isCandidate(row.handle, row.text, creator)
-        })
-        let chosen = []
-        if (fresh.length) {
-          try {
-            chosen = await judge(fresh)
-          } catch (e) {
-            await browser.closeVideo()
-            throw new AiError(e.message)
-          }
+        const comments = parseCount(info.comments)
+        if (comments === null) {
+          await log(`@${creator}: could not read the comment count`)
+        } else if (comments < minComments) {
+          skipped.few++
+          memory[key] = { n: comments, at: Date.now() }
+          await log(`@${creator}: only ${comments} comments`)
+        } else {
+          out.videos.push({
+            url: card.url, creator, caption: (info.caption || card.caption || '').slice(0, 300), views, comments,
+            topic: query, posted: videoPosted(card.url), found: runAt,
+          })
+          known.keys.add(key)
+          await log(`@${creator}: kept (${comments} comments${views !== null ? `, ${card.views} views` : ''})`)
         }
-        if (count !== null) memory[card.url] = { n: count, at: Date.now() } // only now, so a video the AI could not check is read again
-        let added = 0
-        for (const row of chosen) {
-          const key = row.handle.toLowerCase()
-          if (seen.handles.has(key)) continue // the same person can have two comments on one video
-          seen.handles.add(key)
-          out.people.push(makePerson(row, { creator, query, url: card.url, runAt, names }, today))
-          added++
-        }
-        await log(`@${creator}: ${page.rows.length} comments, ${fresh.length} to check, ${added} kept`)
-        const dropped = fresh.filter((row) => !chosen.includes(row)).slice(0, 3)
-        for (const row of dropped) await log(`  left out: "${row.text.replace(/\s+/g, ' ').slice(0, 80)}"`)
         await browser.closeVideo()
-        await browser.pause(2, 5)
+        await browser.pause(1.5, 4)
       }
       await browser.pause()
-    }
-  } catch (e) {
-    if (e instanceof AiError) out.aiError = e.message
-    else if (e instanceof Stop) out.stopped = e.message
-    else throw e
-  }
-  out.people = out.people.slice(0, LIMITS.targetPeople)
-  await log(`Read ${reads} videos, opened ${opens}. Skipped ${skipped.old} older than ${LIMITS.maxAgeDays} days, ${skipped.few} with too few comments and ${skipped.same} with nothing new.`)
-  return out
-}
-
-// Gives people saved before comment links existed their comment id. Opens each video once (browser.visit(url)), reads its comments with
-// their ids, and fills in the people whose comment is found. Returns every person (changed or not) and how it went.
-export async function backfillCommentIds(browser, people, log = async () => {}) {
-  const out = { people, filled: 0, missing: 0, videos: 0, stopped: '' }
-  const urls = [...new Set(people.filter((p) => !p.commentId && p.url).map((p) => p.url))]
-  try {
-    for (const url of urls) {
-      const creator = creatorOf(url)
-      await browser.visit(url)
-      const page = await browser.comments()
-      out.videos++
-      if (!page?.ok) {
-        await log(`@${creator}: comments did not load`)
-        continue
-      }
-      const before = out.people.filter((p) => p.commentId).length
-      out.people = out.people.map((p) => (p.url === url ? fillCommentIds([p], page.rows)[0] : p))
-      const got = out.people.filter((p) => p.commentId).length - before
-      out.filled += got
-      await log(`@${creator}: ${got} of ${people.filter((p) => p.url === url && !p.commentId).length} comment links found`)
-      await browser.pause(2, 5)
     }
   } catch (e) {
     if (e instanceof Stop) out.stopped = e.message
     else throw e
   }
-  out.missing = out.people.filter((p) => !p.commentId).length
+  await log(`Opened ${opens} videos, kept ${out.videos.length}. Passed over ${skipped.known} already listed, ${skipped.old} too old, ${skipped.unpopular} with few views, ${skipped.recent} checked recently, ${skipped.few} with too few comments.`)
   return out
 }

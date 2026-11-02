@@ -1,99 +1,113 @@
-import type { Person, UiState } from './types'
-import { EMPTY_STATE } from './types'
-import { DEMO_PEOPLE } from './demo'
+import type { Done, Video } from './types'
+import { videoKey } from './helpers'
 
-// Two ways to run:
-//  local   `npm run dev` on your computer. Files in the jolt_outreach folder are read and saved by a small local service.
-//  online  the hosted page. People are read from the data branch on GitHub, which the hourly job updates.
-//          Your statuses are saved in this browser only.
-export type Mode = 'local' | 'online'
+// The finder saves videos to the `data` branch of the GitHub repo. This page reads them from there. Marking a video complete adds it to
+// videos_done.json on the same branch (so the finder never lists it again), which needs a GitHub token kept in this browser.
 
-export type Loaded = {
-  mode: Mode
-  dir: string
-  people: Person[]
-  state: UiState
-  demo: boolean
-}
+// Set by the deploy workflow to "owner/name"; when you run the page on your own computer it falls back to this repo.
+const REPO: string = import.meta.env.VITE_REPO ?? 'iamyogeshmalkani/jolt-outreach'
+const TOKEN_KEY = 'jolt.token'
+const LOCAL_DONE_KEY = 'jolt.done'
+const API = 'https://api.github.com'
 
-const STATE_KEY = 'jolt.state'
-let mode: Mode = 'local'
+export const getToken = () => localStorage.getItem(TOKEN_KEY) ?? ''
+export const setToken = (t: string) => (t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY))
 
-const read = <T,>(key: string, fallback: T): T => {
+const readLocalDone = (): Done[] => {
   try {
-    const raw = localStorage.getItem(key)
-    return raw ? (JSON.parse(raw) as T) : fallback
+    const raw = JSON.parse(localStorage.getItem(LOCAL_DONE_KEY) ?? '[]')
+    return Array.isArray(raw) ? raw : []
   } catch {
-    return fallback
+    return []
   }
 }
-
-async function fetchLocal<T>(path: string): Promise<T | null> {
+const writeLocalDone = (items: Done[]) => {
   try {
-    const res = await fetch(`${import.meta.env.BASE_URL}api/${path}`)
-    if (!res.ok || !res.headers.get('content-type')?.includes('json')) return null
-    return (await res.json()) as T
+    localStorage.setItem(LOCAL_DONE_KEY, JSON.stringify(items))
   } catch {
-    return null
+    /* the browser would not store it; the shared copy still works */
   }
 }
 
-// Set by the deploy workflow to "owner/name". The lists are read through GitHub's API, not the raw file address:
-// the raw address sits behind a cache that can serve an old copy for minutes, and the API reads the repo directly.
-const DATA_REPO: string | undefined = import.meta.env.VITE_REPO
+const headers = (accept: string): Record<string, string> => ({
+  Accept: accept,
+  ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+})
 
-async function fetchRemote<T>(file: string): Promise<T | null> {
-  if (!DATA_REPO) return null
-  const res = await fetch(`https://api.github.com/repos/${DATA_REPO}/contents/${file}?ref=data`, {
-    headers: { Accept: 'application/vnd.github.raw+json' },
-  })
-  if (res.status === 404) return null // nothing saved yet
-  if (res.status === 403 || res.status === 429) {
-    throw new Error('GitHub is limiting how often this page can read data. Try again in a few minutes.')
-  }
+// Reads a list through GitHub's API, not the raw file address: the raw address sits behind a cache that can serve an old copy for minutes.
+async function fetchList<T>(file: string): Promise<T[]> {
+  const res = await fetch(`${API}/repos/${REPO}/contents/${file}?ref=data`, { headers: headers('application/vnd.github.raw+json') })
+  if (res.status === 404) return [] // nothing saved yet
+  if (res.status === 403 || res.status === 429) throw new Error('GitHub is limiting how often this page can read data. Try again in a few minutes.')
   if (!res.ok) throw new Error(`GitHub answered ${res.status} when loading ${file}.`)
-  return (await res.json()) as T
+  const items = await res.json()
+  return Array.isArray(items) ? (items as T[]) : []
 }
+
+export type Loaded = { videos: Video[]; done: Done[] }
 
 export async function load(): Promise<Loaded> {
-  // On the hosted page the data always comes from GitHub, so don't look for a local service there.
-  const data = DATA_REPO ? null : await fetchLocal<{ dir: string; people: Person[] }>('data')
-  let people: Person[]
-  let dir = ''
-  let saved: Partial<UiState> | null
-  if (data) {
-    mode = 'local'
-    ;({ people, dir } = data)
-    saved = await fetchLocal<Partial<UiState> | null>('state')
-  } else {
-    mode = 'online'
-    people = (await fetchRemote<Person[]>('people.json')) ?? []
-    saved = read<Partial<UiState> | null>(STATE_KEY, null)
-  }
-  const demo = people.length === 0
-  return {
-    mode,
-    dir,
-    people: demo ? DEMO_PEOPLE : people,
-    // 'Isha' was the old default name, so a browser that still has it gets the new default.
-    state: { ...EMPTY_STATE, ...saved, cfg: { ...EMPTY_STATE.cfg, ...saved?.cfg, ...(saved?.cfg?.name === 'Isha' ? { name: EMPTY_STATE.cfg.name } : {}) } },
-    demo,
-  }
+  const [videos, remote] = await Promise.all([fetchList<Video>('videos_found.json'), fetchList<Done>('videos_done.json')])
+  // Videos marked complete in this browser before a token was added still count.
+  const known = new Set(remote.map((d) => videoKey(d.url)))
+  return { videos, done: [...remote, ...readLocalDone().filter((d) => !known.has(videoKey(d.url)))] }
 }
 
-export async function saveState(state: UiState): Promise<void> {
-  if (mode === 'online') {
+const toB64 = (text: string) => {
+  let bin = ''
+  for (const b of new TextEncoder().encode(text)) bin += String.fromCharCode(b)
+  return btoa(bin)
+}
+const fromB64 = (b64: string) => new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/\s/g, '')), (c) => c.charCodeAt(0)))
+
+// Changes videos_done.json on GitHub: reads it, applies `change`, saves it, and tries again if someone else saved in between.
+async function changeRemote(change: (items: Done[]) => Done[]): Promise<void> {
+  const url = `${API}/repos/${REPO}/contents/videos_done.json`
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch(`${url}?ref=data`, { headers: headers('application/vnd.github+json') })
+    if (res.status === 401) throw new Error('GitHub did not accept the token. Make a new one in Settings.')
+    if (!res.ok && res.status !== 404) throw new Error(`GitHub answered ${res.status} when reading the list.`)
+    const file = res.ok ? ((await res.json()) as { sha: string; content: string }) : null
+    let items: Done[] = []
     try {
-      localStorage.setItem(STATE_KEY, JSON.stringify(state))
+      items = file ? JSON.parse(fromB64(file.content) || '[]') : []
     } catch {
-      throw new Error('This browser would not store your changes.')
+      items = []
     }
-    return
+    const put = await fetch(url, {
+      method: 'PUT',
+      headers: { ...headers('application/vnd.github+json'), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: `Update videos_done ${new Date().toISOString().slice(0, 16)}Z`,
+        content: toB64(JSON.stringify(change(Array.isArray(items) ? items : []), null, 1)),
+        branch: 'data',
+        ...(file ? { sha: file.sha } : {}),
+      }),
+    })
+    if (put.ok) return
+    if (put.status === 401) throw new Error('GitHub did not accept the token. Make a new one in Settings.')
+    if (put.status === 403 || put.status === 404) throw new Error('The token is not allowed to save here. It needs "Contents: Read and write" on the repo.')
+    if (put.status !== 409 && put.status !== 422) throw new Error(`GitHub answered ${put.status} when saving.`)
   }
-  const res = await fetch(`${import.meta.env.BASE_URL}api/state`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(state),
+  throw new Error('Could not save because the list kept changing. Try again.')
+}
+
+// Marks a video complete (or brings it back). Returns 'shared' when saved for the finder too, 'local' when only this browser knows.
+export async function setDone(url: string, on: boolean): Promise<'shared' | 'local'> {
+  const key = videoKey(url)
+  const pending = readLocalDone().filter((d) => videoKey(d.url) !== key) // marked here earlier, before there was a token
+  const stamp = { url, at: new Date().toISOString() }
+  if (!getToken()) {
+    writeLocalDone(on ? [...pending, stamp] : pending)
+    return 'local'
+  }
+  await changeRemote((items) => {
+    const all = new Map(items.map((d) => [videoKey(d.url), d]))
+    for (const d of pending) all.set(videoKey(d.url), d) // they reach the finder now too
+    if (on) all.set(key, stamp)
+    else all.delete(key)
+    return [...all.values()]
   })
-  if (!res.ok) throw new Error('Could not save your changes to disk.')
+  writeLocalDone([])
+  return 'shared'
 }

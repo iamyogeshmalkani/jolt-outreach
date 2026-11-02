@@ -14,7 +14,7 @@ from playwright.sync_api import sync_playwright
 from fixtures import search_html
 
 EXT = str(Path(__file__).resolve().parent.parent)
-FILES, PUTS, AI_CALLS = {}, [], []
+FILES, PUTS = {}, []
 
 
 class FakeGitHub(BaseHTTPRequestHandler):
@@ -43,21 +43,6 @@ class FakeGitHub(BaseHTTPRequestHandler):
         if path.endswith("/branches/data"):
             return self._send(200, {})
         self._send(200, {"full_name": "o/r", "permissions": {"push": True}})
-
-    def do_POST(self):
-        """A stand-in for Groq's POST /openai/v1/chat/completions."""
-        body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-        AI_CALLS.append((self.path, body))
-        if self.headers.get("Authorization") != "Bearer sk-test":
-            return self._send(401, {"error": {"message": "invalid api key"}})
-        system = next(m["content"] for m in body["messages"] if m["role"] == "system")
-        user = next(m["content"] for m in body["messages"] if m["role"] == "user")
-        comments = json.loads(user)
-        if "screen public TikTok comments" in system:  # the check of which comments are about the writer's own habit
-            text = json.dumps([c["id"] for c in comments if "came back" in c["text"]])
-        else:
-            text = json.dumps([f"Groq opener number {i} written for this one" for i in range(len(comments))])
-        self._send(200, {"choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": text, "reasoning": "..."}}]})
 
     def do_PUT(self):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
@@ -98,74 +83,63 @@ def main():
         print("extension loaded:", ext_id)
         ctx.route("https://www.tiktok.com/**", tiktok)
 
-        # 1. one hourly alarm, for people
+        # 1. no alarms unless "run every hour" is ticked
         time.sleep(1)
         alarms = sorted(a["name"] for a in sw.evaluate("chrome.alarms.getAll()"))
-        assert alarms == [], alarms  # runs are started by hand unless "run every hour" is ticked
+        assert alarms == [], alarms
         print("alarms scheduled:", alarms)
 
-        # 2. popup asks for a token first, and offers only one action
+        # 2. popup asks for a token first, and offers one action
         popup = ctx.new_page()
         popup.goto(f"chrome-extension://{ext_id}/popup.html")
         popup.wait_for_function("document.getElementById('state').textContent.length > 0")
         assert "Add your GitHub token" in popup.inner_text("#state"), popup.inner_text("#state")
-        assert popup.query_selector("#videos") is None and popup.inner_text("#people") == "Find people now"
+        assert popup.inner_text("#people") == "Find videos now" and popup.query_selector("#backfill") is None
         print("popup before setup:", popup.inner_text("#state"))
 
-        # 3. settings page: validates input, and offers only the two providers
+        # 3. settings page: topics, what counts as a good video, and nothing about AI or comments
         opts = ctx.new_page()
         opts.goto(f"chrome-extension://{ext_id}/options.html")
-        providers = opts.eval_on_selector_all("#aiProvider option", "els => els.map(e => e.value)")
-        assert providers == ["groq", "anthropic"], providers
+        assert opts.query_selector("#aiKey") is None and opts.query_selector("#skip") is None
+        assert opts.input_value("#minComments") == "20" and opts.input_value("#maxAgeDays") == "60" and opts.input_value("#minViews") == "10000"
         screen = opts.input_value("#comp-screenTime").split("\n")
         assert screen[0] == "Opal" and "Apple Screen Time" in screen, screen
-        assert "Matiks" in opts.input_value("#comp-play") and "Paladin" in opts.input_value("#comp-learn")
         assert "phone addiction" in opts.input_value("#keywords").split("\n")
         opts.fill("#repo", "not a repo")
         opts.fill("#token", "x")
         opts.click("#save")
         opts.wait_for_function("document.getElementById('msg').textContent.length > 0")
         assert "owner/name" in opts.inner_text("#msg")
-        print("settings validation:", opts.inner_text("#msg"), "| providers:", providers)
+        print("settings validation:", opts.inner_text("#msg"))
 
-        # 4. a full people run, with opening lines written by (mock) Groq
-        sw.evaluate("api => chrome.storage.local.set({settings: {repo: 'o/r', token: 'good', api, aiApi: api, aiProvider: 'groq', aiKey: 'sk-test', aiModel: '', useAi: true, auto: false, videosPerRun: 3, startHour: 0, endHour: 24, skip: '', paused: false}})", api)
+        # 4. a full run: videos are saved, with their link and counts, and nothing is read from comments
+        sw.evaluate("api => chrome.storage.local.set({settings: {repo: 'o/r', token: 'good', api, auto: false, videosPerRun: 3, minViews: 0, minComments: 20, maxAgeDays: 60, startHour: 0, endHour: 24, paused: false}})", api)
         popup.reload()
         popup.wait_for_function("!document.getElementById('people').disabled")
         popup.click("#people")
         status = wait_idle(sw, timeout=420)
         assert not status.get("error"), status
-        people = json.loads(FILES["people.json"]["text"])
-        assert 1 <= len(people) <= 300, len(people)
-        assert len({x["found"] for x in people}) == 1 and people[0]["found"], "everyone from one run shares a run time"
-        assert all(x["handle"].startswith("fan") and "reply that must be ignored" not in x["comment"] for x in people)
-        assert all(x["opener"].startswith("Groq opener number") and x["priority"] in "AB" for x in people), [x["opener"] for x in people][:3]
-        assert all(path == "/openai/v1/chat/completions" and call["model"] == "openai/gpt-oss-20b" for path, call in AI_CALLS), AI_CALLS
-        opener_calls = [c for _, c in AI_CALLS if "screen public TikTok comments" not in c["messages"][0]["content"]]
-        assert len(opener_calls) == 1 and len(AI_CALLS) > 1, "one check per video's comments, then one request for the opening lines"
-        assert PUTS[0][0] == "people.json" and PUTS[0][1]["branch"] == "data"
-        assert "videos.json" not in FILES
-        print(f"people run ok: {len(people)} people published, opening line by Groq: {people[0]['opener']!r}")
+        videos = json.loads(FILES["videos_found.json"]["text"])
+        assert 1 <= len(videos) <= 3, len(videos)
+        assert all(v["url"].startswith("https://www.tiktok.com/@maker") and v["comments"] == 40 and v["topic"] for v in videos), videos
+        assert len({v["found"] for v in videos}) == 1
+        assert PUTS[0][0] == "videos_found.json" and PUTS[0][1]["branch"] == "data"
+        assert "people.json" not in FILES
+        print(f"run ok: {len(videos)} videos published, first: {videos[0]['url']}")
         popup.wait_for_function("document.getElementById('state').textContent.includes('Saved')")
         print("popup after run:", popup.inner_text("#state"))
 
-        # 5. running again never saves the same person twice
+        # 5. running again never lists a video twice, and a video marked complete on the page never comes back
+        done = videos[0]["url"]
+        FILES["videos_done.json"] = {"sha": "d1", "text": json.dumps([{"url": done, "at": "2026-11-01T00:00:00Z"}])}
+        FILES.pop("videos_found.json")
         popup.click("#people")
         wait_idle(sw, timeout=420)
-        handles = [x["handle"] for x in json.loads(FILES["people.json"]["text"])]
-        assert len(handles) == len(set(handles)), handles
-        print("second run: no duplicate people:", len(handles), "in total")
+        again = [v["url"] for v in json.loads(FILES["videos_found.json"]["text"])] if "videos_found.json" in FILES else []
+        assert done not in again and len(again) == len(set(again)), (done, again)
+        print("a video marked complete is not found again:", len(again), "others listed")
 
-        # 6. a wrong AI key ends the run with the reason and saves nobody, because no comment could be checked
-        sw.evaluate("chrome.storage.local.get('settings').then(r => chrome.storage.local.set({settings: {...r.settings, aiKey: 'wrong'}, seen: {}, videos: {}}))")
-        FILES.pop("people.json")
-        popup.click("#people")
-        status = wait_idle(sw, timeout=420)
-        assert "did not accept the API key" in status.get("error", ""), status
-        assert "people.json" not in FILES, FILES.keys()
-        print("wrong AI key: run stopped with:", status["error"])
-
-        # 7. a verification check pauses the hourly runs
+        # 6. a verification check pauses the runs
         ctx.unroute("https://www.tiktok.com/**")
         ctx.route("https://www.tiktok.com/**", lambda r: r.fulfill(status=200, content_type="text/html", body="<body>Please verify to continue</body>"))
         popup.click("#people")

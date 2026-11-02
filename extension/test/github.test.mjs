@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import http from 'node:http'
-import { checkAccess, fetchKnown, mergeLists, publish } from '../lib/github.js'
+import { checkAccess, fetchKnown, mergeLists, publishVideos } from '../lib/github.js'
 
 // A small stand-in for GitHub's Contents API, including the "someone else saved first" conflict.
 function fakeGitHub({ files = {}, conflictOnce = false, pushAllowed = true, branchExists = true } = {}) {
@@ -21,7 +21,7 @@ function fakeGitHub({ files = {}, conflictOnce = false, pushAllowed = true, bran
       if (file && req.method === 'PUT') {
         const data = JSON.parse(body)
         state.puts.push({ file, data })
-        if (conflictOnce && !state.conflicted) { state.conflicted = true; state.files[file] = { sha: 'newer', text: JSON.stringify([{ handle: 'concurrent' }]) }; return send(409, {}) }
+        if (conflictOnce && !state.conflicted) { state.conflicted = true; state.files[file] = { sha: 'newer', text: JSON.stringify([{ url: 'https://www.tiktok.com/@x/video/700000000000000099' }]) }; return send(409, {}) }
         if (state.files[file] && data.sha !== state.files[file].sha) return send(409, {})
         state.files[file] = { sha: 'sha' + state.puts.length, text: Buffer.from(data.content, 'base64').toString('utf8') }
         return send(200, {})
@@ -40,32 +40,33 @@ test('merges new items in front, without duplicates, within the cap', () => {
   assert.deepEqual(out.map((x) => x.k), ['b', 'a', 'c'])
 })
 
-test('publishes people and keeps what was already there, including non-English text', async () => {
-  const { state, server, api } = await fakeGitHub({ files: { 'people.json': { sha: 's0', text: JSON.stringify([{ handle: 'old', comment: 'ça va' }]) } } })
+const vid = (n, extra = {}) => ({ url: `https://www.tiktok.com/@c${n}/video/70000000000000000${n}`, caption: `video ${n} ça va 😭`, ...extra })
+
+test('publishes videos and keeps what was already there, including non-English text', async () => {
+  const { state, server, api } = await fakeGitHub({ files: { 'videos_found.json': { sha: 's0', text: JSON.stringify([vid(1)]) } } })
   try {
-    const saved = await publish(cfg(api), { people: [{ handle: 'New', comment: 'I scroll 😭' }, { handle: 'old' }] })
-    assert.equal(saved.people, 2)
-    const written = JSON.parse(state.files['people.json'].text)
-    assert.deepEqual(written.map((p) => p.handle), ['New', 'old'])
+    const saved = await publishVideos(cfg(api), [vid(2), vid(1, { caption: 'again' })])
+    assert.equal(saved, 2)
+    const written = JSON.parse(state.files['videos_found.json'].text)
+    assert.deepEqual(written.map((v) => v.caption), ['video 2 ça va 😭', 'again'])
     assert.equal(state.puts[0].data.branch, 'data')
-    assert.equal(written[0].comment, 'I scroll 😭')
   } finally { server.close() }
 })
 
-test('creates a file that does not exist yet', async () => {
+test('creates the file when it does not exist yet', async () => {
   const { state, server, api } = await fakeGitHub()
   try {
-    await publish(cfg(api), { people: [{ handle: 'first' }] })
-    assert.equal(JSON.parse(state.files['people.json'].text).length, 1)
+    await publishVideos(cfg(api), [vid(1)])
+    assert.equal(JSON.parse(state.files['videos_found.json'].text).length, 1)
     assert.equal(state.puts[0].data.sha, undefined)
   } finally { server.close() }
 })
 
 test('retries after a conflict and keeps the other writer\'s data', async () => {
-  const { state, server, api } = await fakeGitHub({ files: { 'people.json': { sha: 's0', text: '[]' } }, conflictOnce: true })
+  const { state, server, api } = await fakeGitHub({ files: { 'videos_found.json': { sha: 's0', text: '[]' } }, conflictOnce: true })
   try {
-    await publish(cfg(api), { people: [{ handle: 'mine' }] })
-    assert.deepEqual(JSON.parse(state.files['people.json'].text).map((p) => p.handle), ['mine', 'concurrent'])
+    await publishVideos(cfg(api), [vid(1)])
+    assert.equal(JSON.parse(state.files['videos_found.json'].text).length, 2)
     assert.equal(state.puts.length, 2)
   } finally { server.close() }
 })
@@ -73,24 +74,28 @@ test('retries after a conflict and keeps the other writer\'s data', async () => 
 test('explains a rejected token and a missing branch in plain words', async () => {
   const { server, api } = await fakeGitHub()
   try {
-    await assert.rejects(publish(cfg(api, 'bad'), { people: [{ handle: 'x' }] }), /did not accept the token/)
+    await assert.rejects(publishVideos(cfg(api, 'bad'), [vid(1)]), /did not accept the token/)
   } finally { server.close() }
   const missing = await fakeGitHub({ branchExists: false })
   try {
-    await assert.rejects(publish(cfg(missing.api), { people: [{ handle: 'x' }] }), /could not find the repo or its data branch/)
+    await assert.rejects(publishVideos(cfg(missing.api), [vid(1)]), /could not find the repo or its data branch/)
   } finally { missing.server.close() }
 })
 
-test('knows who is already published', async () => {
-  const { server, api } = await fakeGitHub({ files: { 'people.json': { sha: 'a', text: JSON.stringify([{ handle: 'Someone' }]) } } })
+test('knows which videos are listed or marked complete, by video number', async () => {
+  const { server, api } = await fakeGitHub({ files: {
+    'videos_found.json': { sha: 'a', text: JSON.stringify([vid(1)]) },
+    'videos_done.json': { sha: 'b', text: JSON.stringify([{ url: 'https://www.tiktok.com/@renamed/video/700000000000000002', at: 'x' }]) },
+  } })
   try {
     const known = await fetchKnown(cfg(api))
-    assert.ok(known.handles.has('someone'))
+    assert.ok(known.keys.has('700000000000000001') && known.keys.has('700000000000000002'))
+    assert.equal(known.keys.size, 2)
   } finally { server.close() }
 })
 
 test('checks that the token can write', async () => {
-  const ok = await fakeGitHub({ files: { 'people.json': { sha: 'a', text: '[]' } } })
+  const ok = await fakeGitHub({ files: { 'videos_found.json': { sha: 'a', text: '[]' } } })
   try { assert.equal(await checkAccess(cfg(ok.api)), 'o/r') } finally { ok.server.close() }
   const ro = await fakeGitHub({ pushAllowed: false })
   try { await assert.rejects(checkAccess(cfg(ro.api)), /can read the repo but not write/) } finally { ro.server.close() }

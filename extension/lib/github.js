@@ -1,5 +1,5 @@
 // Saves results to the `data` branch of the GitHub repo using the Contents API. The hosted page reads them from there.
-import { LIMITS } from './rules.js'
+import { LIMITS, videoKey } from './rules.js'
 
 const enc = new TextEncoder()
 const dec = new TextDecoder()
@@ -82,21 +82,16 @@ async function writeMerged(cfg, name, fresh, keyOf, cap) {
   throw new Error(`Could not save ${name} after several tries because it kept changing. Try again.`)
 }
 
-export async function publish(cfg, { people = [] }) {
-  if (!people.length) return {}
-  return { people: await writeMerged(cfg, 'people.json', people, (p) => p.handle?.toLowerCase(), LIMITS.maxPeople) }
+// Adds videos to the list the page shows (new ones first, no video twice).
+export async function publishVideos(cfg, videos = []) {
+  if (!videos.length) return 0
+  return writeMerged(cfg, 'videos_found.json', videos, (v) => videoKey(v.url), LIMITS.maxFound)
 }
 
-// Saves people who are already published, changed (their fresh versions replace the old ones).
-export async function updatePeople(cfg, people) {
-  if (!people.length) return 0
-  return writeMerged(cfg, 'people.json', people, (p) => p.handle?.toLowerCase(), LIMITS.maxPeople)
-}
-
-// Who is already published, so the same person is never queued twice.
+// Videos already found or marked complete on the page, so none is found twice. Keyed by video number.
 export async function fetchKnown(cfg) {
-  const people = await readFile(cfg, 'people.json')
-  return { handles: new Set(people.items.map((p) => String(p.handle).toLowerCase())) }
+  const [found, done] = await Promise.all([readFile(cfg, 'videos_found.json'), readFile(cfg, 'videos_done.json')])
+  return { keys: new Set([...found.items, ...done.items].map((v) => videoKey(v.url))) }
 }
 
 export async function checkAccess(cfg) {
@@ -106,7 +101,7 @@ export async function checkAccess(cfg) {
   if (repo.permissions && repo.permissions.push === false) {
     throw new Error('The token can read the repo but not write to it. It needs "Contents: Read and write".')
   }
-  await readFile(cfg, 'people.json')
+  await readFile(cfg, 'videos_found.json')
   const b = await gh(cfg, `/repos/${cfg.repo}/branches/${branch(cfg)}`)
   if (!b.ok) throw new Error(`The repo has no "${branch(cfg)}" branch yet.`)
   return repo.full_name
