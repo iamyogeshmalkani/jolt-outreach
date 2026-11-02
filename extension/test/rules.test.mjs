@@ -60,6 +60,12 @@ test('comment ids are matched to rows by writer and text, and a row without an i
   assert.ok(!('commentId' in r.makePerson({ handle: 'a', text: 'x' }, base, 'd')))
 })
 
+test('saved people get their comment id only on an exact writer and text match', () => {
+  const people = [{ handle: 'A', comment: 'one  two' }, { handle: 'b', comment: 'x' }, { handle: 'c', comment: 'y', commentId: '1' }]
+  const rows = [{ handle: 'a', text: 'one two', id: '71234567890123456' }, { handle: 'b', text: 'other', id: '7999' }]
+  assert.deepEqual(r.fillCommentIds(people, rows).map((p) => p.commentId), ['71234567890123456', undefined, '1'])
+})
+
 test('saved shapes match what the page reads', () => {
   const p = r.makePerson({ handle: 'a', text: 'I study and scroll my phone for hours' }, { creator: 'c', query: 'q', url: 'u', runAt: '2026-10-29T10:00:00.000Z' }, '2026-10-29')
   assert.deepEqual(Object.keys(p).sort(), ['added', 'comment', 'found', 'handle', 'note', 'opener', 'priority', 'source', 'url'])

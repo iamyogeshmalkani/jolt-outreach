@@ -5,7 +5,7 @@
 //   comments() -> { ok, rows }                            the comments of the opened video
 //   closeVideo()                                          back to the results
 //   pause(a, b)                                           a short, random wait
-import { DEFAULT_COMPETITORS, DEFAULT_KEYWORDS, LIMITS, competitorNames, isCandidate, makePerson, parseCount, pickRunQueries, shuffled, todayIso } from './rules.js'
+import { DEFAULT_COMPETITORS, DEFAULT_KEYWORDS, LIMITS, competitorNames, fillCommentIds, isCandidate, makePerson, parseCount, pickRunQueries, shuffled, todayIso } from './rules.js'
 
 export class Stop extends Error {}
 class AiError extends Error {}
@@ -122,5 +122,35 @@ export async function findPeople(browser, known, seen, log = async () => {}, jud
   }
   out.people = out.people.slice(0, LIMITS.targetPeople)
   await log(`Read ${reads} videos, opened ${opens}. Skipped ${skipped.few} with too few comments and ${skipped.same} with nothing new.`)
+  return out
+}
+
+// Gives people saved before comment links existed their comment id. Opens each video once (browser.visit(url)), reads its comments with
+// their ids, and fills in the people whose comment is found. Returns every person (changed or not) and how it went.
+export async function backfillCommentIds(browser, people, log = async () => {}) {
+  const out = { people, filled: 0, missing: 0, videos: 0, stopped: '' }
+  const urls = [...new Set(people.filter((p) => !p.commentId && p.url).map((p) => p.url))]
+  try {
+    for (const url of urls) {
+      const creator = creatorOf(url)
+      await browser.visit(url)
+      const page = await browser.comments()
+      out.videos++
+      if (!page?.ok) {
+        await log(`@${creator}: comments did not load`)
+        continue
+      }
+      const before = out.people.filter((p) => p.commentId).length
+      out.people = out.people.map((p) => (p.url === url ? fillCommentIds([p], page.rows)[0] : p))
+      const got = out.people.filter((p) => p.commentId).length - before
+      out.filled += got
+      await log(`@${creator}: ${got} of ${people.filter((p) => p.url === url && !p.commentId).length} comment links found`)
+      await browser.pause(2, 5)
+    }
+  } catch (e) {
+    if (e instanceof Stop) out.stopped = e.message
+    else throw e
+  }
+  out.missing = out.people.filter((p) => !p.commentId).length
   return out
 }

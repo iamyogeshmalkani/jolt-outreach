@@ -87,6 +87,12 @@ export async function publish(cfg, { people = [] }) {
   return { people: await writeMerged(cfg, 'people.json', people, (p) => p.handle?.toLowerCase(), LIMITS.maxPeople) }
 }
 
+// Saves people who are already published, changed (their fresh versions replace the old ones).
+export async function updatePeople(cfg, people) {
+  if (!people.length) return 0
+  return writeMerged(cfg, 'people.json', people, (p) => p.handle?.toLowerCase(), LIMITS.maxPeople)
+}
+
 // Who is already published, so the same person is never queued twice.
 export async function fetchKnown(cfg) {
   const people = await readFile(cfg, 'people.json')

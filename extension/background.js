@@ -1,9 +1,9 @@
 // Runs the finder inside your own Chrome: opens a small TikTok window, reads results the way a person would,
 // and saves what it finds to the `data` branch of your GitHub repo, where the hosted page picks it up.
-import { publish, fetchKnown } from './lib/github.js'
+import { publish, fetchKnown, readFile, updatePeople } from './lib/github.js'
 import { clickCard, closeVideo, readCommentIds, readCommentsPage, readGuard, readOpenVideo, readSearchCards } from './lib/pages.js'
 import { DEFAULTS } from './lib/settings.js'
-import { Stop, findPeople } from './lib/tasks.js'
+import { Stop, backfillCommentIds, findPeople } from './lib/tasks.js'
 import { improve, pickRelevant } from './lib/llm.js'
 import { attachIds, competitorNames } from './lib/rules.js'
 
@@ -56,6 +56,12 @@ function makeBrowser(tabId) {
       const cards = (await exec(tabId, readSearchCards)) || []
       await guard(cards.length > 0)
       return cards
+    },
+    // Opens a video's own page directly (used to go back to videos already saved).
+    async visit(url) {
+      await navigate(tabId, url)
+      await sleep(3500)
+      await guard()
     },
     // Click the result like a person would. If it is not on this page, open the video's own page instead.
     async openVideo(url) {
@@ -154,6 +160,48 @@ async function run(manual, delayMs = 0) {
   }
 }
 
+// ------------------------------------------- comment links for saved people
+// People saved before comment links existed have no comment id. This opens each of their videos once, reads the ids, and saves them.
+async function backfill() {
+  if (busy) return
+  const s = await getSettings()
+  if (!s.token) {
+    await patchStatus({ error: 'Add your GitHub token in Settings first.', running: false })
+    return
+  }
+  busy = true
+  const keepAlive = setInterval(() => chrome.runtime.getPlatformInfo(), 20_000)
+  let win
+  try {
+    await patchStatus({ running: true, error: '', message: '' })
+    await log('Started: adding comment links to saved people')
+    const cfg = { repo: s.repo.trim(), token: s.token.trim(), ...(s.api ? { api: s.api } : {}) }
+    const { items } = await readFile(cfg, 'people.json')
+    const todo = items.filter((p) => !p.commentId && p.url).length
+    if (!todo) {
+      await patchStatus({ message: 'Everyone saved already has a comment link.' })
+      return
+    }
+    win = await chrome.windows.create({ url: 'about:blank', focused: false })
+    const result = await backfillCommentIds(makeBrowser(win.tabs[0].id), items, log)
+    if (result.filled) await updatePeople(cfg, result.people)
+    const rest = result.missing ? ` ${result.missing} could not be found (comment deleted, or too far down the video).` : ''
+    await patchStatus({
+      error: result.stopped,
+      message: `Added ${result.filled} comment links.${rest}${result.filled ? ' The page shows them within about 5 minutes.' : ''}`,
+    })
+    await log(result.stopped ? `Stopped: ${result.stopped}` : `Done: ${result.filled} links added`)
+  } catch (e) {
+    await patchStatus({ error: e.message || String(e) })
+    await log(`Failed: ${e.message || e}`)
+  } finally {
+    clearInterval(keepAlive)
+    if (win?.id !== undefined) chrome.windows.remove(win.id).catch(() => {})
+    await patchStatus({ running: false })
+    busy = false
+  }
+}
+
 // -------------------------------------------------------------- schedule
 // Runs are started by hand. Only when "run every hour" is switched on is there an alarm. Older versions also set a video alarm, so an update clears all alarms first.
 async function schedule() {
@@ -180,6 +228,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'run') run(true)
+  if (msg.type === 'backfill') backfill()
   if (msg.type === 'resume') getSettings().then((s) => store.set({ settings: { ...s, paused: false } })).then(() => patchStatus({ error: '' }))
   if (msg.type === 'reschedule') chrome.alarms.clearAll().then(schedule)
 })

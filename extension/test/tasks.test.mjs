@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { Stop, findPeople } from '../lib/tasks.js'
+import { Stop, backfillCommentIds, findPeople } from '../lib/tasks.js'
 
 // Stands in for the AI: keeps the comments whose text contains "came back", as a person describing their own habit would.
 const judge = async (rows) => rows.filter((r) => /came back|cannot stop|stop scrolling/.test(r.text))
@@ -197,4 +197,25 @@ test('a video with exactly 2 comments is read', async () => {
   const cards = [card(1)]
   const out = await findPeople(fakeBrowser({ cards, videos: { [cards[0].url]: withCount('2') }, comments: rowsFor(cards[0]) }), empty(), seen(), undefined, judge)
   assert.equal(out.people.length, 1)
+})
+
+test('saved people get comment ids by revisiting each video once', async () => {
+  const people = [
+    { handle: 'a', comment: 'one', url: 'https://www.tiktok.com/@c/video/1' },
+    { handle: 'b', comment: 'two', url: 'https://www.tiktok.com/@c/video/1' },
+    { handle: 'd', comment: 'four', url: 'https://www.tiktok.com/@c/video/2', commentId: '5' },
+    { handle: 'e', comment: 'gone', url: 'https://www.tiktok.com/@c/video/3' },
+  ]
+  const visits = []
+  let current = ''
+  const browser = {
+    pause: async () => {},
+    visit: async (u) => { visits.push(u); current = u },
+    comments: async () => ({ ok: true, rows: current.endsWith('/1') ? [{ handle: 'a', text: 'one', id: '71234567890123456' }, { handle: 'b', text: 'two', id: '71234567890123457' }] : [] }),
+  }
+  const out = await backfillCommentIds(browser, people)
+  assert.deepEqual(visits, ['https://www.tiktok.com/@c/video/1', 'https://www.tiktok.com/@c/video/3'])
+  assert.deepEqual(out.people.map((p) => p.commentId), ['71234567890123456', '71234567890123457', '5', undefined])
+  assert.equal(out.filled, 2)
+  assert.equal(out.missing, 1)
 })

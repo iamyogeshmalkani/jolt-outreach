@@ -121,6 +121,18 @@ export function attachIds(rows, ids) {
   return rows.map((row) => (byKey.has(key(row)) ? { ...row, id: byKey.get(key(row)) } : row))
 }
 
+// Fills in the comment id for saved people who lack one, from comments freshly read off their video (rows carry `id`).
+// A person is matched only on who wrote it and exactly what it says; no match means no id, never a guess.
+export function fillCommentIds(people, rows) {
+  const norm = (s) => String(s ?? '').replace(/\s+/g, ' ').trim().toLowerCase()
+  const byKey = new Map((rows || []).filter((x) => x?.id).map((x) => [`${norm(x.handle)}\n${norm(x.text)}`, x.id]))
+  return people.map((p) => {
+    if (p.commentId) return p
+    const id = byKey.get(`${norm(p.handle)}\n${norm(p.comment)}`)
+    return id ? { ...p, commentId: id } : p
+  })
+}
+
 // ---- the shape saved to people.json (what the page reads) ----
 // `runAt` is the same for everyone a run finds; the page tags the people from the latest run as New.
 export function makePerson(row, { creator, query, url, runAt, names }, today) {
