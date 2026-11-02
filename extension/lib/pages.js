@@ -39,7 +39,7 @@ export async function readSearchCards() {
       creator: text(root, '[data-e2e="search-card-user-unique-id"]'),
     })
   }
-  return out.slice(0, 12)
+  return out.slice(0, 30)
 }
 
 // Opens a result the way a person does: click it, and TikTok shows the video over the search page.

@@ -70,11 +70,20 @@ export function mentionsCompetitor(text, names) {
 export const LIMITS = {
   targetPeople: 300, // a run stops once it has this many people (it normally ends by reading its videos)
   topComments: 50,   // only the first this-many comments of each video are read (TikTok lists the top ones first)
+  maxAgeDays: 60,    // only videos posted in the last two months are read
   maxVideos: 100,    // the most videos one run may read
   minComments: 2,    // a video with fewer comments than this is flagged and skipped
   regrow: 5,         // a video read before is read again only once it has this many more comments
   maxFails: 5,       // videos in a row that fail to open or load before the run gives up
   maxPeople: 300,
+}
+
+// When a TikTok video was posted. Its id starts with the posting time (seconds since 1970, shifted left 32 bits), so no page needs
+// opening. Returns days old, or null when the address has no readable id (then the video is not filtered out).
+export function videoAgeDays(url, now = Date.now()) {
+  const id = (/\/video\/(\d{18,20})/.exec(String(url || '')) || [])[1]
+  if (!id) return null
+  return (now - Number(BigInt(id) >> 32n) * 1000) / 86_400_000
 }
 
 // TikTok shows counts like "40", "1,234", "1.2K" or "3M".

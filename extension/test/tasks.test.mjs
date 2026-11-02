@@ -157,7 +157,7 @@ test('a video with fewer than 2 comments is flagged and skipped, and remembered'
   assert.ok(lines.some((l) => /flagged, only 1 comments/.test(l)), lines.join('|'))
   assert.equal(memory[cards[0].url].n, 1)
   assert.equal(memory[cards[1].url].n, 1200)
-  assert.ok(lines.some((l) => /Skipped 1 with too few comments/.test(l)), lines.join('|'))
+  assert.ok(lines.some((l) => /1 with too few comments/.test(l)), lines.join('|'))
 })
 
 test('a video read before is skipped until it has 5 more comments', async () => {
@@ -218,4 +218,18 @@ test('saved people get comment ids by revisiting each video once', async () => {
   assert.deepEqual(out.people.map((p) => p.commentId), ['71234567890123456', '71234567890123457', '5', undefined])
   assert.equal(out.filled, 2)
   assert.equal(out.missing, 1)
+})
+
+test('videos older than two months are never opened', async () => {
+  const idAt = (ms) => String((BigInt(Math.floor(ms / 1000)) << 32n) + 99n)
+  const day = 86_400_000
+  const mk = (n, ageDays) => ({ url: `https://www.tiktok.com/@maker${n}/video/${idAt(Date.now() - ageDays * day)}`, caption: 'x', views: '1K', creator: 'maker' + n })
+  const cards = [mk(1, 5), mk(2, 200), mk(3, 59), mk(4, 400)]
+  const b = fakeBrowser({ cards })
+  const lines = []
+  await findPeople(b, empty(), seen(), async (l) => lines.push(l), judge)
+  assert.deepEqual(opened(b), [cards[0].url, cards[2].url].sort((x, y) => opened(b).indexOf(x) - opened(b).indexOf(y)))
+  assert.equal(opened(b).length, 2)
+  assert.ok(!opened(b).includes(cards[1].url) && !opened(b).includes(cards[3].url))
+  assert.match(lines.join('\n'), /Skipped 2 older than 60 days/)
 })

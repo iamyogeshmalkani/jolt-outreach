@@ -66,6 +66,16 @@ test('saved people get their comment id only on an exact writer and text match',
   assert.deepEqual(r.fillCommentIds(people, rows).map((p) => p.commentId), ['71234567890123456', undefined, '1'])
 })
 
+test('a video\'s age comes from the posting time inside its id', () => {
+  const now = Date.UTC(2026, 10, 2)
+  const idAt = (ms) => String((BigInt(Math.floor(ms / 1000)) << 32n) + 123456n)
+  const day = 86_400_000
+  assert.ok(Math.abs(r.videoAgeDays(`https://www.tiktok.com/@a/video/${idAt(now - 10 * day)}`, now) - 10) < 0.01)
+  assert.ok(r.videoAgeDays(`https://www.tiktok.com/@a/video/${idAt(now - 90 * day)}`, now) > r.LIMITS.maxAgeDays)
+  assert.equal(r.videoAgeDays('https://www.tiktok.com/@a/video/12', now), null)
+  assert.equal(r.videoAgeDays('', now), null)
+})
+
 test('saved shapes match what the page reads', () => {
   const p = r.makePerson({ handle: 'a', text: 'I study and scroll my phone for hours' }, { creator: 'c', query: 'q', url: 'u', runAt: '2026-10-29T10:00:00.000Z' }, '2026-10-29')
   assert.deepEqual(Object.keys(p).sort(), ['added', 'comment', 'found', 'handle', 'note', 'opener', 'priority', 'source', 'url'])

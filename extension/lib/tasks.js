@@ -5,7 +5,7 @@
 //   comments() -> { ok, rows }                            the comments of the opened video
 //   closeVideo()                                          back to the results
 //   pause(a, b)                                           a short, random wait
-import { DEFAULT_COMPETITORS, DEFAULT_KEYWORDS, LIMITS, competitorNames, fillCommentIds, isCandidate, makePerson, parseCount, pickRunQueries, shuffled, todayIso } from './rules.js'
+import { DEFAULT_COMPETITORS, DEFAULT_KEYWORDS, LIMITS, competitorNames, fillCommentIds, isCandidate, makePerson, parseCount, pickRunQueries, shuffled, todayIso, videoAgeDays } from './rules.js'
 
 export class Stop extends Error {}
 class AiError extends Error {}
@@ -37,7 +37,7 @@ export async function findPeople(browser, known, seen, log = async () => {}, jud
   let reads = 0
   let opens = 0
   let fails = 0
-  const skipped = { few: 0, same: 0 }
+  const skipped = { few: 0, same: 0, old: 0 }
   const tried = new Set() // two searches can return the same video; open it once per run
   const finished = () => reads >= videos || opens >= maxOpens || out.people.length >= LIMITS.targetPeople || fails >= LIMITS.maxFails
   try {
@@ -49,6 +49,12 @@ export async function findPeople(browser, known, seen, log = async () => {}, jud
       for (const card of shuffled(cards)) {
         if (here >= perQuery || finished()) break
         if (tried.has(card.url)) continue
+        const age = videoAgeDays(card.url)
+        if (age !== null && age > LIMITS.maxAgeDays) {
+          tried.add(card.url)
+          skipped.old++
+          continue
+        }
         tried.add(card.url)
         const creator = creatorOf(card.url)
         const info = await browser.openVideo(card.url)
@@ -121,7 +127,7 @@ export async function findPeople(browser, known, seen, log = async () => {}, jud
     else throw e
   }
   out.people = out.people.slice(0, LIMITS.targetPeople)
-  await log(`Read ${reads} videos, opened ${opens}. Skipped ${skipped.few} with too few comments and ${skipped.same} with nothing new.`)
+  await log(`Read ${reads} videos, opened ${opens}. Skipped ${skipped.old} older than ${LIMITS.maxAgeDays} days, ${skipped.few} with too few comments and ${skipped.same} with nothing new.`)
   return out
 }
 

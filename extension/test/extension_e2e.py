@@ -136,7 +136,7 @@ def main():
         status = wait_idle(sw, timeout=420)
         assert not status.get("error"), status
         people = json.loads(FILES["people.json"]["text"])
-        assert 1 <= len(people) <= 40, len(people)
+        assert 1 <= len(people) <= 300, len(people)
         assert len({x["found"] for x in people}) == 1 and people[0]["found"], "everyone from one run shares a run time"
         assert all(x["handle"].startswith("fan") and "reply that must be ignored" not in x["comment"] for x in people)
         assert all(x["opener"].startswith("Groq opener number") and x["priority"] in "AB" for x in people), [x["opener"] for x in people][:3]
