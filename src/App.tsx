@@ -3,7 +3,8 @@ import { load, type Loaded } from './api'
 import type { Platform } from './types'
 import Videos from './Videos'
 
-const fromHash = (): Platform => (location.hash === '#instagram' ? 'instagram' : 'tiktok')
+// Instagram is the default; the TikTok list is at #tiktok
+const fromHash = (): Platform => (location.hash === '#tiktok' ? 'tiktok' : 'instagram')
 
 export default function App() {
   const [platform, setPlatform] = useState<Platform>(fromHash)
@@ -33,7 +34,7 @@ export default function App() {
   }, [here !== undefined, refresh])
 
   const choose = (p: Platform) => {
-    location.hash = p === 'instagram' ? '#instagram' : ''
+    location.hash = p === 'tiktok' ? '#tiktok' : ''
     setPlatform(p)
   }
 

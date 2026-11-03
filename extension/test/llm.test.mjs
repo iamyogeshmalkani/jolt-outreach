@@ -121,6 +121,9 @@ test('sends big batches in groups of 40, and asks again once for an answer it ca
     const lines = []
     assert.deepEqual(await pickRelevant(cfg(bad.api), rows(3), { log: async (l) => lines.push(l) }), [])
     assert.match(lines.join('\n'), /Skipped 3 comments/)
+    assert.match(lines.join('\n'), /Claude said: "still not a list"/)
+    assert.match(bad.seen[1].body.messages[0].content, /Reply with only a JSON array/)
+    assert.ok(!/Reply with only/.test(bad.seen[0].body.messages[0].content), 'only the second try repeats the instruction')
   } finally { bad.server.close() }
 })
 

@@ -26,7 +26,12 @@ function explain(status, message = '') {
 }
 
 // An answer the model gave but we could not use, as opposed to a failed request (wrong key, no credit, no internet).
-export class FormatError extends Error {}
+export class FormatError extends Error {
+  constructor(message, reply = '') {
+    super(message)
+    this.reply = reply // what the model actually said, for the log
+  }
+}
 
 export async function ask(cfg, system, userText, maxTokens = 100) {
   const base = cfg.api ?? API
@@ -82,14 +87,14 @@ export function parseKept(text, count) {
     try {
       list = JSON.parse(text.slice(start, end + 1))
     } catch {
-      throw new FormatError('The model returned a list that could not be read.')
+      throw new FormatError('The model returned a list that could not be read.', text)
     }
   } else if (/^[\s\d,]+$/.test(text) && /\d/.test(text)) {
     list = text.split(',').map((n) => parseInt(n, 10)).filter((n) => !Number.isNaN(n))
   } else if (/^\W*(none|no comments?|nothing|empty)\W*$/i.test(text)) {
     list = []
   } else {
-    throw new FormatError('The model did not return a list.')
+    throw new FormatError('The model did not return a list.', text)
   }
   if (!Array.isArray(list)) throw new FormatError('The model did not return a list.')
   const kept = new Set()
@@ -111,10 +116,15 @@ export async function pickRelevant(cfg, rows, { log = async () => {} } = {}) {
     let keep
     for (let attempt = 0; attempt < 2 && !keep; attempt++) {
       try {
-        keep = parseKept(await ask(cfg, JUDGE_SYSTEM, lines, 100 + 6 * group.length), group.length)
+        // the second time the instruction is repeated after the comments, in case the first answer talked instead of listing
+        const user = attempt ? `${lines}\n\nReply with only a JSON array of numbers, like [0,3], or [].` : lines
+        keep = parseKept(await ask(cfg, JUDGE_SYSTEM, user, 100 + 6 * group.length), group.length)
       } catch (e) {
         if (!(e instanceof FormatError)) throw e
-        if (attempt) await log(`Claude gave an answer that could not be read (${e.message}). Skipped ${group.length} comments.`)
+        if (attempt) {
+          const said = e.reply ? ` Claude said: "${e.reply.replace(/\s+/g, ' ').slice(0, 100)}".` : ''
+          await log(`Claude gave an answer that could not be read (${e.message}).${said} Skipped ${group.length} comments.`)
+        }
       }
     }
     group.forEach((row, j) => {

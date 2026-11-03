@@ -51,7 +51,15 @@ def reel_html(code, layout="list"):
     desc = f'{counts}maker{n} on March 3, 2026: "Why I cannot stop scrolling #{n}"'
     og_video = '<meta property="og:video" content="https://cdn/x.mp4">' if video else ""
     video_tag = "<video></video>" if video else "<img src='x.jpg'>"
-    if layout == "real":
+    if layout == "more":
+        # 15 comments, then more only when a "Load more comments" button is clicked (nothing loads on scroll); a "Liked by" line sits among them
+        row = """const d = document.createElement('div')
+    d.innerHTML = `<div><a href="/fan${n}/"><img alt="fan${n}'s profile picture" src="a.jpg"></a><a href="/fan${n}/"><span>fan${n}</span></a>
+      <a href="/p/CODE/c/${n}/"><time>4w</time></a><span dir="auto">${text}</span></div>`
+    list.appendChild(d)"""
+        holder = '<div id="comments"></div><div role="button" aria-label="Load more comments" id="more" style="height:20px">+</div>'
+        before = '<div><a href="/rumi_06.05/"><span>rumi_06.05</span></a><span dir="auto">Liked by rumi_06.05 and others</span></div>'
+    elif layout == "real":
         # shaped like the real page: a "suggested" list with profile links and text but no times, then comments whose time is a <time>
         row = """const d = document.createElement('div')
     d.innerHTML = `<div><a href="/fan${n}/"><img alt="fan${n}'s profile picture" src="a.jpg"></a><div><a href="/fan${n}/" role="link"><span>fan${n}</span></a>
@@ -91,6 +99,7 @@ def reel_html(code, layout="list"):
     const text = n % 2 ? 'what a nice song, love the editing ' + n : 'My screen time is 9 hours a day and the brain rot is real ' + n
     {row}
   }} }}
-  add(5)
-  panel.addEventListener('scroll', () => {{ if (panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 5 && n < 80) add(8) }})
+  add({15 if layout == 'more' else 5})
+  if (document.getElementById('more')) document.getElementById('more').addEventListener('click', () => {{ if (n < 80) add(15) }})
+  else panel.addEventListener('scroll', () => {{ if (panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 5 && n < 80) add(8) }})
 }})()</script></body></html>"""

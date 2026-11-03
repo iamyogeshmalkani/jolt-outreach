@@ -39,13 +39,19 @@ const headers = (accept: string): Record<string, string> => ({
 })
 
 // Reads a list through GitHub's API, not the raw file address: the raw address sits behind a cache that can serve an old copy for minutes.
+// But GitHub lets an anonymous visitor make only 60 API requests an hour (per network), and reloading the page a few times is enough to
+// use them up. Then the same file is read from the raw address instead, which has no such limit, and may be a few minutes old.
 async function fetchList<T>(file: string): Promise<T[]> {
-  const res = await fetch(`${API}/repos/${REPO}/contents/${file}?ref=data`, { headers: headers('application/vnd.github.raw+json') })
-  if (res.status === 404) return [] // nothing saved yet
-  if (res.status === 403 || res.status === 429) throw new Error('GitHub is limiting how often this page can read data. Try again in a few minutes.')
-  if (!res.ok) throw new Error(`GitHub answered ${res.status} when loading ${file}.`)
-  const items = await res.json()
-  return Array.isArray(items) ? (items as T[]) : []
+  const asList = (items: unknown) => (Array.isArray(items) ? (items as T[]) : [])
+  const res = await fetch(`${API}/repos/${REPO}/contents/${file}?ref=data`, { headers: headers('application/vnd.github.raw+json') }).catch(() => null)
+  if (res?.ok) return asList(await res.json())
+  if (res?.status === 404) return [] // nothing saved yet
+  // Rate limited, a bad token, or no answer: try the raw address
+  const raw = await fetch(`https://raw.githubusercontent.com/${REPO}/data/${file}?t=${Math.floor(Date.now() / 60_000)}`).catch(() => null)
+  if (raw?.ok) return asList(await raw.json().catch(() => []))
+  if (raw?.status === 404) return []
+  if (res && (res.status === 403 || res.status === 429)) throw new Error('GitHub is limiting how often this page can read data. Try again in a few minutes.')
+  throw new Error(`GitHub answered ${res?.status ?? 'nothing'} when loading ${file}.`)
 }
 
 export type Loaded = { videos: Video[]; done: Done[] }

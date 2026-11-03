@@ -84,7 +84,7 @@ export async function readCommentsPage(max = 50) {
     return NOT_PROFILES.has(h.toLowerCase()) ? '' : h
   }
   const TIME = /^(\d+ ?(s|m|h|d|w|y|sec|min|hr|hour|day|week|month|year)s?|just now|now)( ?[·•].*)?$/i // "4w", "3 days", "4w · Edited"
-  const NOISE = /^(reply|replies|like|liked|see translation|translate|edited|pinned|author|·|•|[\d.,KMB]+ ?(likes?|repl(y|ies))|(view|hide)( all)? ?\(?[\d.,]*\)? ?(more )?repl(y|ies)\)?( \(?[\d.,]*\)?)?)$/i
+  const NOISE = /^(liked by .*|reply|replies|like|liked|see translation|translate|edited|pinned|author|·|•|[\d.,KMB]+ ?(likes?|repl(y|ies))|(view|hide)( all)? ?\(?[\d.,]*\)? ?(more )?repl(y|ies)\)?( \(?[\d.,]*\)?)?)$/i
   const inChrome = (e) => Boolean(e.closest('nav, header, [role="navigation"]'))
   // inside a list that sits inside a comment's list item: a reply
   const inReplies = (e) => {
@@ -152,13 +152,21 @@ export async function readCommentsPage(max = 50) {
     return null
   }
   const panel = scroller(allRows()[0].el)
+  // After the first few comments Instagram can show a "load more comments" button instead of loading on scroll, so it is clicked too.
+  const loadMore = () => {
+    const btn = document.querySelector('[aria-label*="more comments" i], [aria-label*="load more" i]')
+    const target = btn?.closest('[role="button"], button')
+    if (target) target.click()
+    return Boolean(target)
+  }
   let stale = 0
-  for (let i = 0; i < 150 && stale < 4; i++) {
+  for (let i = 0; i < 200 && stale < 6; i++) {
     const before = allRows()
     if (before.length >= max) break
+    const clicked = loadMore()
     if (panel) panel.scrollTop = panel.scrollHeight
     else before.at(-1)?.el.scrollIntoView({ block: 'end' })
-    await sleep(1100)
+    await sleep(clicked ? 1800 : 1300)
     stale = allRows().length === before.length ? stale + 1 : 0
   }
   return { ok: true, rows: allRows().slice(0, max).map(({ handle, text }) => ({ handle, text })) }

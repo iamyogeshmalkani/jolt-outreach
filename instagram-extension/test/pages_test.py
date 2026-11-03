@@ -82,6 +82,15 @@ def main():
         assert len(page.evaluate(fn("readCommentsPage", "300"))["rows"]) == 85
         print("readCommentsPage reads all comments when asked for more than there are: 85")
 
+        # 15 comments and then a "Load more comments" button, as on your reels: the button is clicked until everything is read
+        show(f"https://www.instagram.com/reel/{CODES[1]}/", reel_html(CODES[1], "more"))
+        page.evaluate(fn("readOpenVideo"))
+        got = page.evaluate(fn("readCommentsPage", "300"))
+        assert got["ok"] and len(got["rows"]) == 90, len(got["rows"])  # 15 and then 15 at a time until 80 is passed
+        assert not any("Liked by" in r["text"] for r in got["rows"]), "the like summary is not a comment"
+        assert len(page.evaluate(fn("readCommentsPage", "20"))["rows"]) == 20
+        print("readCommentsPage (load more button) ok: 90, and no 'Liked by' line")
+
         # shaped like the real page: suggested accounts (profile links with text, no time) must not be read as comments
         show(f"https://www.instagram.com/reel/{CODES[1]}/", reel_html(CODES[1], "real"))
         page.evaluate(fn("readOpenVideo"))
