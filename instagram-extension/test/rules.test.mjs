@@ -98,3 +98,9 @@ test('the default comment topics cover the subjects asked for', () => {
   assert.ok(hit('i need a digital detox'))
   assert.ok(!hit('this recipe looks really tasty, thanks for sharing'))
 })
+
+test('handles are treated as brands only when they say so, not when a word is part of a name', () => {
+  const keep = (handle) => r.pickComments([{ handle, text: 'my screen time is high' }], 'maker', ['screen time']).length
+  for (const ok of ['happy_dev', 'robotics_fan', 'official_lkhamilton', 'shopaholic', 'storeyteller', 'anna.apple']) assert.equal(keep(ok), 1, ok)
+  for (const brand of ['official_deals', 'best.shop', 'coupon_king', 'jolt.io', 'ugc_agency', 'the_app', 'mybot']) assert.equal(keep(brand), brand === 'mybot' ? 1 : 0, brand)
+})

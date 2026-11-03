@@ -40,7 +40,8 @@ export const MINOR =
 export const SENSITIVE =
   /suicid|kill myself|self.?harm|cutting myself|cut myself|cutting my (wrists?|arms?|legs?|thighs?|skin)|anorex|bulimi|eating disorder|overdose|abus/i
 export const SEXUAL = /\b(sex|nsfw|onlyfans|nude|horny)\b/i
-export const BRAND_HANDLE = /(app|official|\.io|promo|deals|steals|coupon|bot|shop|store|ugc|agency)/i
+// whole words only, so real names such as "happy_dev" or "robotics_fan" are not mistaken for brands
+export const BRAND_HANDLE = /(^|[._-])(app|apps|promo|deals|steals|coupon|coupons|bot|shop|store|ugc|agency)([._-]|$)|\.io$/i
 // No "i" flag, on purpose: the code pattern only matches upper-case codes.
 export const PROMO = /https?:\/\/|www\.|use my code|referral|promo|(?=[A-Z0-9]*\d)(?=[A-Z0-9]*[A-Z])\b[A-Z0-9]{6,9}\b/
 

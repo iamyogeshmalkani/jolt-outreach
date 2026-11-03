@@ -76,6 +76,16 @@ def main():
         assert not any(r["text"] in ("Reply", "3d", "12 likes") or r["text"].startswith("View") for r in got["rows"])
         print(f"readCommentsPage (no lists) ok: {len(got['rows'])} comments, first = {first}")
 
+        # shaped like the real page: suggested accounts (profile links with text, no time) must not be read as comments
+        show(f"https://www.instagram.com/reel/{CODES[1]}/", reel_html(CODES[1], "real"))
+        page.evaluate(fn("readOpenVideo"))
+        got = page.evaluate(fn("readCommentsPage", "50"))
+        assert got["ok"] and len(got["rows"]) == 50, len(got["rows"])
+        assert got["rows"][0] == {"handle": "fan0", "text": "My screen time is 9 hours a day and the brain rot is real 0"}, got["rows"][0]
+        assert all(r["handle"] == f"fan{i}" for i, r in enumerate(got["rows"])), [r["handle"] for r in got["rows"][:4]]
+        assert not any("suggested" in r["handle"] or r["text"].startswith("View") for r in got["rows"])
+        print("readCommentsPage (real-page shape, suggestions ignored) ok")
+
         # and when the text elements have no dir attribute at all
         show(f"https://www.instagram.com/reel/{CODES[1]}/", reel_html(CODES[1], "plain"))
         page.evaluate(fn("readOpenVideo"))

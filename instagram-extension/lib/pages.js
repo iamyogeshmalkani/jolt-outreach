@@ -70,8 +70,9 @@ export async function readOpenVideo() {
 
 // Reads the first `max` comments of the opened reel (Instagram lists the top ones first), scrolling just enough to load them.
 // It does not depend on Instagram's list markup, which changes. It walks the page in reading order: a profile link followed by the text
-// beside it is one comment (the avatar link and the name link before the text count once; @mentions inside text, times, "Reply" and
-// like counts are ignored). Replies in a list inside a comment are skipped; if the page lays replies out another way they are read
+// beside it is one comment (the avatar link and the name link before the text count once; @mentions inside text, "Reply" and like
+// counts are ignored). Every real comment shows how long ago it was written ("4w", a <time> element), and a profile link with text but
+// no time is not a comment (suggested accounts, menus and the like), so only rows with a time are kept. Replies in a list inside a comment are skipped; if the page lays replies out another way they are read
 // as comments of their own. If the comments are not showing it clicks the comment button. When nothing is found, `diag` describes
 // the page so the log shows why.
 export async function readCommentsPage(max = 50) {
@@ -81,7 +82,8 @@ export async function readCommentsPage(max = 50) {
     const h = /^\/([A-Za-z0-9._]{1,30})\/$/.exec(new URL(a.href, location.href).pathname)?.[1] || ''
     return NOT_PROFILES.has(h.toLowerCase()) ? '' : h
   }
-  const NOISE = /^(reply|replies|like|liked|see translation|translate|edited|pinned|author|·|[\d.,KMB]+ ?(likes?|repl(y|ies))|\d+ ?[smhdwy]|\d+ ?(sec|min|hr|hour|day|week|month|year)s?|(view|hide)( all)? ?[\d.,]* ?(more )?repl(y|ies))$/i
+  const TIME = /^(\d+ ?(s|m|h|d|w|y|sec|min|hr|hour|day|week|month|year)s?|just now|now)( ?[·•].*)?$/i // "4w", "3 days", "4w · Edited"
+  const NOISE = /^(reply|replies|like|liked|see translation|translate|edited|pinned|author|·|•|[\d.,KMB]+ ?(likes?|repl(y|ies))|(view|hide)( all)? ?\(?[\d.,]*\)? ?(more )?repl(y|ies)\)?( \(?[\d.,]*\)?)?)$/i
   const inChrome = (e) => Boolean(e.closest('nav, header, [role="navigation"]'))
   // inside a list that sits inside a comment's list item: a reply
   const inReplies = (e) => {
@@ -95,25 +97,28 @@ export async function readCommentsPage(max = 50) {
     const out = []
     let cur = null
     const flush = () => {
-      if (cur && cur.texts.length) {
+      if (cur && cur.timed && cur.texts.length) {
         const best = cur.texts.slice().sort((a, b) => b.t.length - a.t.length)[0]
         out.push({ handle: cur.handle, text: best.t, el: best.el })
       }
       cur = null
     }
-    for (const e of document.querySelectorAll(`a[href^="/"], ${textSel}`)) {
+    for (const e of document.querySelectorAll(`a[href^="/"], time, ${textSel}`)) {
       if (inChrome(e) || inReplies(e)) continue
-      if (e.tagName === 'A') {
+      if (e.tagName === 'TIME') {
+        if (cur) cur.timed = true
+      } else if (e.tagName === 'A') {
         const handle = profile(e)
         if (!handle || (dir && e.closest(DIR))) continue // not a profile, or an @mention inside a comment
-        if (cur && !cur.texts.length) cur.handle = handle // the avatar link and the name link of one comment
+        if (cur && !cur.texts.length && !cur.timed) cur.handle = handle // the avatar link and the name link of one comment
         else {
           flush()
-          cur = { handle, texts: [] }
+          cur = { handle, texts: [], timed: false }
         }
       } else if (cur && !e.closest('a') && (dir ? !e.querySelector(DIR) : ![...e.children].some((c) => !/^(A|BR|IMG|SVG)$/i.test(c.tagName)))) {
         const t = e.innerText.replace(/\s+/g, ' ').trim()
-        if (t.length > 1 && t.toLowerCase() !== cur.handle.toLowerCase() && !NOISE.test(t)) cur.texts.push({ t, el: e })
+        if (TIME.test(t)) cur.timed = true
+        else if (t.length > 1 && t.toLowerCase() !== cur.handle.toLowerCase() && !NOISE.test(t)) cur.texts.push({ t, el: e })
       }
     }
     flush()
@@ -137,7 +142,7 @@ export async function readCommentsPage(max = 50) {
     return {
       ok: false,
       rows: [],
-      diag: `${[...document.querySelectorAll('a[href^="/"]')].filter(profile).length} profile links, ${document.querySelectorAll('span[dir="auto"]').length} text spans, ` +
+      diag: `${[...document.querySelectorAll('a[href^="/"]')].filter(profile).length} profile links, ${document.querySelectorAll('span[dir="auto"]').length} text spans, ${document.querySelectorAll('time').length} time elements, ` +
         `${document.querySelectorAll('ul').length} lists, aria-labels: ${labels.join(' / ') || 'none'}`,
     }
   }

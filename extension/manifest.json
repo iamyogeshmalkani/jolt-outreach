@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Jolt finder",
-  "version": "3.2.1",
+  "version": "3.2.2",
   "description": "Finds recent, popular TikTok videos on your topics, plus the comments on them about screen time, brain rot and similar, and lists them on your Jolt outreach page.",
   "permissions": [
     "storage",
