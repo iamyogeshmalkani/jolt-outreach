@@ -17,6 +17,7 @@ export default function Videos({ platform, onPlatform, loaded, onRefresh }: {
   loaded: Loaded
   onRefresh: () => Promise<void>
 }) {
+  const [view, setView] = useState<'videos' | 'comments'>('videos')
   const [tab, setTab] = useState<'todo' | 'done'>('todo')
   const [done, setDoneKeys] = useState(() => new Set(loaded.done.map((d) => videoKey(d.url))))
   const [token, setTokenState] = useState(getToken)
@@ -36,6 +37,12 @@ export default function Videos({ platform, onPlatform, loaded, onRefresh }: {
   const todo = sorted.filter((v) => !doneKeys.has(videoKey(v.url)))
   const finished = sorted.filter((v) => doneKeys.has(videoKey(v.url)))
   const shown = tab === 'todo' ? todo : finished
+
+  // Every saved comment with the video it is on, newest run first.
+  const people = useMemo(
+    () => sorted.flatMap((v) => (v.matches ?? []).map((c) => ({ ...c, video: v }))),
+    [sorted],
+  )
 
   async function mark(v: Video, on: boolean) {
     const key = videoKey(v.url)
@@ -83,10 +90,16 @@ export default function Videos({ platform, onPlatform, loaded, onRefresh }: {
             <button key={p} aria-pressed={platform === p} onClick={() => onPlatform(p)}>{NAMES[p]}</button>
           ))}
         </div>
-        <div className="chips" role="group" aria-label="Show">
-          <button aria-pressed={tab === 'todo'} onClick={() => setTab('todo')}>To do <b>{todo.length}</b></button>
-          <button aria-pressed={tab === 'done'} onClick={() => setTab('done')}>Complete <b>{finished.length}</b></button>
+        <div className="chips" role="group" aria-label="View">
+          <button aria-pressed={view === 'videos'} onClick={() => setView('videos')}>Videos <b>{loaded.videos.length}</b></button>
+          <button aria-pressed={view === 'comments'} onClick={() => setView('comments')}>Comments <b>{people.length}</b></button>
         </div>
+        {view === 'videos' && (
+          <div className="chips" role="group" aria-label="Show">
+            <button aria-pressed={tab === 'todo'} onClick={() => setTab('todo')}>To do <b>{todo.length}</b></button>
+            <button aria-pressed={tab === 'done'} onClick={() => setTab('done')}>Complete <b>{finished.length}</b></button>
+          </div>
+        )}
         <div className="bar-end">
           <button className="quiet" onClick={() => onRefresh()}>Refresh</button>
           <button className="quiet" onClick={() => setSettingsOpen(true)}>Settings</button>
@@ -100,7 +113,38 @@ export default function Videos({ platform, onPlatform, loaded, onRefresh }: {
       )}
       {note && <p className="banner" role="status">{note}</p>}
 
-      <main className="videos">
+      {view === 'comments' && (
+        <main className="videos">
+          {people.length === 0 && (
+            <p className="empty">
+              {loaded.videos.some((v) => v.matches !== undefined)
+                ? 'No saved comment is about screen time or digital habits yet. The finder checks the top comments of every video it keeps.'
+                : 'No comments yet. Update the finder extension, run it, and the comments it keeps appear here with a link to each person.'}
+            </p>
+          )}
+          <ul>
+            {people.map((c, i) => (
+              <li key={`${c.handle}-${videoKey(c.video.url)}-${i}`} className="video">
+                <p className="v-caption">{c.text}</p>
+                <p className="v-facts">
+                  <b>@{c.handle}</b>
+                  <span>{c.topics.join(', ')}</span>
+                  <span>on {c.video.creator ? `@${c.video.creator}'s` : 'a'} video</span>
+                </p>
+                <div className="v-actions">
+                  <a className="primary" href={profileUrl(platform, c.handle)} target="_blank" rel="noopener noreferrer">Open profile</a>
+                  <button className="secondary" onClick={() => copy(profileUrl(platform, c.handle))}>
+                    {copied === profileUrl(platform, c.handle) ? 'Copied' : 'Copy profile link'}
+                  </button>
+                  <a className="secondary" href={c.video.url} target="_blank" rel="noopener noreferrer">Open video</a>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </main>
+      )}
+
+      {view === 'videos' && <main className="videos">
         {shown.length === 0 && (
           <p className="empty">
             {loaded.videos.length === 0
@@ -171,7 +215,7 @@ export default function Videos({ platform, onPlatform, loaded, onRefresh }: {
             )
           })}
         </ul>
-      </main>
+      </main>}
 
       <Settings
         open={settingsOpen}

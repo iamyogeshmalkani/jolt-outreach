@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Jolt Instagram finder",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Finds recent, popular Instagram reels on your keywords, plus the comments on them about screen time and digital habits, and lists them on your Jolt outreach page.",
   "permissions": [
     "storage",

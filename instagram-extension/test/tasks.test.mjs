@@ -178,3 +178,12 @@ test('a kept reel whose comments will not load is still listed, with nothing rea
   assert.deepEqual(out.videos[0].matches, [])
   assert.match(lines.join('\n'), /comments did not load/)
 })
+
+test('when no comment matches, the log shows a few that were looked at', async () => {
+  const rows = [{ handle: 'ana', text: 'what a lovely song, I really love this one' }, { handle: 'ben', text: 'first, and here early too friends' }]
+  const lines = []
+  const out = await findVideos(fakeBrowser({ cards: [card(1)], commentRows: { ok: true, rows } }), empty(), async (l) => lines.push(l), opts)
+  assert.deepEqual(out.videos[0].matches, [])
+  assert.match(lines.join('\n'), /left out: @ana "what a lovely song/)
+  assert.match(lines.join('\n'), /left out: @ben "first, and here early/)
+})

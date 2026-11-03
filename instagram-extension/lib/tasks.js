@@ -86,6 +86,11 @@ export async function findVideos(browser, known, log = async () => {}, {
               }
             }
             if (!matches) matches = matchTopics(cleaned, commentTopics)
+            if (!matches.length && rows.length) {
+              // show what was looked at, so a reader that misreads the page, or comments that are simply off topic, can be told apart
+              const shown = (cleaned.length ? cleaned : rows).slice(0, 3)
+              for (const r of shown) await log(`  left out: @${r.handle} "${String(r.text).replace(/\s+/g, ' ').slice(0, 90)}"`)
+            }
             out.videos.push({
               url: reelUrl(card.url), creator, caption: (info.caption || card.caption || '').slice(0, 300), likes,
               comments: parseCount(info.comments), topic: query, posted: videoPosted(card.url), found: runAt, read: rows.length, matches,
