@@ -57,12 +57,34 @@ def main():
         assert info["opened"] and info["isVideo"] and info["likes"] == "12,345" and info["comments"] == "12", info
         assert info["creator"] == "maker1" and info["caption"] == "Why I cannot stop scrolling #1" and info["markers"] == [], info
         print("readOpenVideo ok:", info["creator"], info["likes"], info["comments"], info["caption"])
+        # comments, in Instagram's list markup: replies in a list inside a comment are left out
         got = page.evaluate(fn("readCommentsPage", "50"))
         assert got["ok"] and len(got["rows"]) == 50, len(got["rows"])
         assert got["rows"][0] == {"handle": "fan0", "text": "My screen time is 9 hours a day and the brain rot is real 0"}, got["rows"][0]
         assert not any("must be ignored" in r["text"] for r in got["rows"]), "replies are left out"
-        print(f"readCommentsPage ok: {len(got['rows'])} comments, first = {got['rows'][0]}")
+        print(f"readCommentsPage (lists) ok: {len(got['rows'])} comments, first = {got['rows'][0]}")
         assert len(page.evaluate(fn("readCommentsPage", "7"))["rows"]) == 7
+
+        # the same reel with no lists at all: avatar and name links, an @mention, times, "Reply" and "View 2 replies" around the text
+        show(f"https://www.instagram.com/reel/{CODES[1]}/", reel_html(CODES[1], "divs"))
+        page.evaluate(fn("readOpenVideo"))
+        got = page.evaluate(fn("readCommentsPage", "50"))
+        assert got["ok"] and len(got["rows"]) == 50, len(got["rows"])
+        first = got["rows"][0]
+        assert first["handle"] == "fan0" and first["text"].startswith("My screen time is 9 hours a day and the brain rot is real 0"), first
+        assert all(r["handle"] == f"fan{i}" for i, r in enumerate(got["rows"])), [r["handle"] for r in got["rows"][:5]]
+        assert not any(r["text"] in ("Reply", "3d", "12 likes") or r["text"].startswith("View") for r in got["rows"])
+        print(f"readCommentsPage (no lists) ok: {len(got['rows'])} comments, first = {first}")
+
+        # and when the text elements have no dir attribute at all
+        show(f"https://www.instagram.com/reel/{CODES[1]}/", reel_html(CODES[1], "plain"))
+        page.evaluate(fn("readOpenVideo"))
+        got = page.evaluate(fn("readCommentsPage", "50"))
+        assert got["ok"] and len(got["rows"]) == 50, len(got["rows"])
+        assert got["rows"][0] == {"handle": "fan0", "text": "My screen time is 9 hours a day and the brain rot is real 0"}, got["rows"][0]
+        assert all(r["text"] not in ("Reply", "3d") for r in got["rows"])
+        print("readCommentsPage (plain text elements) ok")
+        show(f"https://www.instagram.com/reel/{CODES[1]}/", reel_html(CODES[1]))
         show(f"https://www.instagram.com/reel/{CODES[2]}/", reel_html(CODES[2]))
         assert page.evaluate(fn("readOpenVideo"))["likes"] == "2.5K"
         show(f"https://www.instagram.com/reel/{CODES[5]}/", reel_html(CODES[5]))
@@ -79,7 +101,9 @@ def main():
         info = page.evaluate(fn("readOpenVideo"))
         assert info["opened"] is False and info["markers"][0] == "Page not found" and info["markers"][1] == "/reel/CODE/", info
         print("a missing reel lists what the page has:", info["markers"])
-        assert page.evaluate(fn("readCommentsPage")) == {"ok": False, "rows": []}
+        got = page.evaluate(fn("readCommentsPage"))
+        assert got["ok"] is False and got["rows"] == [] and "profile links" in got["diag"] and "lists" in got["diag"], got
+        print("no comments: the page is described:", got["diag"])
         b.close()
 
 

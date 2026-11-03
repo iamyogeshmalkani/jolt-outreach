@@ -96,7 +96,7 @@ export async function findVideos(browser, known, log = async () => {}, {
             const counts = likes !== null ? `${likes} likes` : 'likes hidden'
             await log(page?.ok
               ? `${who}: kept (${counts}), ${matches.length} of the top ${rows.length} comments are about their habits`
-              : `${who}: kept (${counts}), but its comments did not load`)
+              : `${who}: kept (${counts}), but its comments did not load${page?.diag ? `. The page had: ${page.diag}` : ''}`)
           }
         }
         await browser.pause(3, 7)

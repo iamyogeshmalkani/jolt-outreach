@@ -38,9 +38,19 @@ function navigate(tabId, url, timeout = 30_000) {
   })
 }
 
+// Runs a function in the page. Instagram sometimes replaces the page while it is read ("Frame with ID 0 was removed"); that is tried
+// again a few times, and then reported as an empty answer (the reel counts as not opened) instead of ending the whole run.
 async function exec(tabId, func, args = [], world = 'ISOLATED') {
-  const [injected] = await chrome.scripting.executeScript({ target: { tabId }, func, args, world })
-  return injected?.result
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const [injected] = await chrome.scripting.executeScript({ target: { tabId }, func, args, world })
+      return injected?.result
+    } catch (e) {
+      if (!/frame with id|no frame|cannot access|tab was closed|no tab with id/i.test(e?.message || '')) throw e
+      if (attempt >= 2) return undefined
+      await sleep(2500)
+    }
+  }
 }
 
 function makeBrowser(tabId) {

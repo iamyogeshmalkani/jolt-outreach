@@ -38,7 +38,10 @@ def search_html(link_kind="reel", numbers=None):
     return f"<html><head><title>Search</title></head><body><main>{links}</main></body></html>"
 
 
-def reel_html(code):
+def reel_html(code, layout="list"):
+    """layout "list": comments are li items in a ul, replies in a ul inside the item (Instagram's older markup).
+    layout "plain": like "divs" but the text elements have no dir attribute.
+    layout "divs": no lists at all; avatar and name links, @mentions inside the text, labels like "Reply", replies in nested divs."""
     n = next((k for k, v in CODES.items() if v == code), None)
     if n is None:
         return "<html><head><title>Page not found</title></head><body>Sorry, this page isn't available.</body></html>"
@@ -47,19 +50,35 @@ def reel_html(code):
     desc = f'{counts}maker{n} on March 3, 2026: "Why I cannot stop scrolling #{n}"'
     og_video = '<meta property="og:video" content="https://cdn/x.mp4">' if video else ""
     video_tag = "<video></video>" if video else "<img src='x.jpg'>"
+    if layout == "plain":
+        row = """const d = document.createElement('div')
+    d.innerHTML = `<div><a href="/fan${n}/"><img src="a.jpg"></a><a href="/fan${n}/"><span>fan${n}</span></a><span>${text}</span><div><span>3d</span><span>Reply</span></div></div>`
+    list.appendChild(d)"""
+        holder = '<div id="comments"></div>'
+    elif layout == "list":
+        row = """const li = document.createElement('li')
+    li.innerHTML = `<div><a href="/fan${n}/">fan${n}</a><span dir="auto">${text}</span><span dir="auto">3d</span>
+      <ul><li><a href="/replier/">replier</a><span dir="auto">a long reply about phone addiction that must be ignored, it is the longest text here</span></li></ul></div>`
+    list.appendChild(li)"""
+        holder = '<ul id="comments"></ul>'
+    else:
+        row = """const d = document.createElement('div')
+    d.innerHTML = `<div><a href="/fan${n}/"><img src="a.jpg"></a><a href="/fan${n}/" role="link"><span>fan${n}</span></a>
+      <div><span dir="auto">${text} <a href="/someone.else/">@someone.else</a></span></div>
+      <div><span dir="auto">3d</span><span dir="auto">12 likes</span><span dir="auto">Reply</span><span dir="auto">View 2 replies</span></div></div>`
+    list.appendChild(d)"""
+        holder = '<div id="comments"></div>'
     return f"""<html><head><title>maker{n} on Instagram</title>
 <meta property="og:description" content='{desc}'>{og_video}</head>
 <body><article><header><a role="link" href="/maker{n}/">maker{n}</a></header>{video_tag}
-<div id="panel" style="height:120px;overflow:auto"><ul id="comments"></ul></div></article>
+<div id="panel" style="height:120px;overflow:auto">{holder}</div></article>
 <script>(() => {{
   const list = document.getElementById('comments'), panel = document.getElementById('panel')
   let n = 0
   const add = (k) => {{ for (let i = 0; i < k; i++, n++) {{
     const text = n % 2 ? 'what a nice song, love the editing ' + n : 'My screen time is 9 hours a day and the brain rot is real ' + n
-    const li = document.createElement('li')
-    li.innerHTML = `<div><a href="/fan${{n}}/">fan${{n}}</a><span dir="auto">${{text}}</span><span dir="auto">3d</span>
-      <ul><li><a href="/replier/">replier</a><span dir="auto">a long reply about phone addiction that must be ignored, it is the longest text here</span></li></ul></div>`
-    list.appendChild(li) }} }}
+    {row}
+  }} }}
   add(5)
   panel.addEventListener('scroll', () => {{ if (panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 5 && n < 80) add(8) }})
 }})()</script></body></html>"""

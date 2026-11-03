@@ -69,33 +69,87 @@ export async function readOpenVideo() {
 }
 
 // Reads the first `max` comments of the opened reel (Instagram lists the top ones first), scrolling just enough to load them.
-// Replies are left out. If the comments are not showing, it clicks the comment button once.
+// It does not depend on Instagram's list markup, which changes. It walks the page in reading order: a profile link followed by the text
+// beside it is one comment (the avatar link and the name link before the text count once; @mentions inside text, times, "Reply" and
+// like counts are ignored). Replies in a list inside a comment are skipped; if the page lays replies out another way they are read
+// as comments of their own. If the comments are not showing it clicks the comment button. When nothing is found, `diag` describes
+// the page so the log shows why.
 export async function readCommentsPage(max = 50) {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-  const profile = (a) => /^\/([A-Za-z0-9._]{1,30})\/$/.exec(new URL(a.href, location.href).pathname)?.[1] || ''
-  // What belongs to this item only: not its replies, which sit in a list inside it.
-  const own = (li, sel) => [...li.querySelectorAll(sel)].filter((e) => e.closest('li') === li)
-  const items = () => [...document.querySelectorAll('li')].filter((li) => !li.parentElement.closest('li') &&
-    own(li, 'a[href^="/"]').some(profile) && own(li, 'span[dir="auto"]').some((sp) => !sp.closest('a')))
-  for (let i = 0; i < 8 && !items().length; i++) {
-    if (i === 2) document.querySelector('[aria-label="Comment"]')?.closest('[role="button"], button')?.click()
+  const NOT_PROFILES = new Set(['explore', 'reels', 'reel', 'p', 'tv', 'direct', 'accounts', 'stories', 'about', 'legal', 'web', 'directory', 'tags', 'locations'])
+  const profile = (a) => {
+    const h = /^\/([A-Za-z0-9._]{1,30})\/$/.exec(new URL(a.href, location.href).pathname)?.[1] || ''
+    return NOT_PROFILES.has(h.toLowerCase()) ? '' : h
+  }
+  const NOISE = /^(reply|replies|like|liked|see translation|translate|edited|pinned|author|·|[\d.,KMB]+ ?(likes?|repl(y|ies))|\d+ ?[smhdwy]|\d+ ?(sec|min|hr|hour|day|week|month|year)s?|(view|hide)( all)? ?[\d.,]* ?(more )?repl(y|ies))$/i
+  const inChrome = (e) => Boolean(e.closest('nav, header, [role="navigation"]'))
+  // inside a list that sits inside a comment's list item: a reply
+  const inReplies = (e) => {
+    const li = e.closest('li')
+    return Boolean(li && li.parentElement?.closest('li'))
+  }
+  // Comment text is normally a span or div with dir="auto". If nothing is found that way, any small text element is tried.
+  const DIR = 'span[dir="auto"], div[dir="auto"]'
+  const rows = (textSel = DIR) => {
+    const dir = textSel === DIR
+    const out = []
+    let cur = null
+    const flush = () => {
+      if (cur && cur.texts.length) {
+        const best = cur.texts.slice().sort((a, b) => b.t.length - a.t.length)[0]
+        out.push({ handle: cur.handle, text: best.t, el: best.el })
+      }
+      cur = null
+    }
+    for (const e of document.querySelectorAll(`a[href^="/"], ${textSel}`)) {
+      if (inChrome(e) || inReplies(e)) continue
+      if (e.tagName === 'A') {
+        const handle = profile(e)
+        if (!handle || (dir && e.closest(DIR))) continue // not a profile, or an @mention inside a comment
+        if (cur && !cur.texts.length) cur.handle = handle // the avatar link and the name link of one comment
+        else {
+          flush()
+          cur = { handle, texts: [] }
+        }
+      } else if (cur && !e.closest('a') && (dir ? !e.querySelector(DIR) : ![...e.children].some((c) => !/^(A|BR|IMG|SVG)$/i.test(c.tagName)))) {
+        const t = e.innerText.replace(/\s+/g, ' ').trim()
+        if (t.length > 1 && t.toLowerCase() !== cur.handle.toLowerCase() && !NOISE.test(t)) cur.texts.push({ t, el: e })
+      }
+    }
+    flush()
+    return out
+  }
+  const allRows = () => {
+    const found = rows()
+    return found.length ? found : rows('span, div')
+  }
+  const openComments = () => {
+    const btn = document.querySelector('[aria-label="Comment"], [aria-label="Comments"], [aria-label^="Comment" i]')
+    btn?.closest('[role="button"], button')?.click()
+  }
+
+  for (let i = 0; i < 12 && !allRows().length; i++) {
+    if (i === 2 || i === 6) openComments()
     await sleep(1000)
   }
-  if (!items().length) return { ok: false, rows: [] }
+  if (!allRows().length) {
+    const labels = [...new Set([...document.querySelectorAll('[aria-label]')].map((e) => e.getAttribute('aria-label')))].slice(0, 14)
+    return {
+      ok: false,
+      rows: [],
+      diag: `${[...document.querySelectorAll('a[href^="/"]')].filter(profile).length} profile links, ${document.querySelectorAll('span[dir="auto"]').length} text spans, ` +
+        `${document.querySelectorAll('ul').length} lists, aria-labels: ${labels.join(' / ') || 'none'}`,
+    }
+  }
   const scroller = (el) => {
     for (let n = el.parentElement; n; n = n.parentElement) if (n.scrollHeight > n.clientHeight + 50 && /auto|scroll/.test(getComputedStyle(n).overflowY)) return n
     return null
   }
-  const panel = scroller(items()[0])
-  for (let i = 0; i < 12 && items().length < max; i++) {
+  const panel = scroller(allRows()[0].el)
+  for (let i = 0; i < 12 && allRows().length < max; i++) {
     if (panel) panel.scrollTop = panel.scrollHeight
-    else items().at(-1)?.scrollIntoView({ block: 'end' })
+    else allRows().at(-1)?.el.scrollIntoView({ block: 'end' })
     await sleep(1100)
   }
-  const rows = items().slice(0, max).map((li) => {
-    const handle = own(li, 'a[href^="/"]').map(profile).find(Boolean) || ''
-    const texts = own(li, 'span[dir="auto"]').filter((sp) => !sp.closest('a')).map((sp) => sp.innerText.replace(/\s+/g, ' ').trim())
-    return { handle, text: texts.sort((a, b) => b.length - a.length)[0] || '' }
-  })
-  return { ok: true, rows }
+  return { ok: true, rows: allRows().slice(0, max).map(({ handle, text }) => ({ handle, text })) }
 }
