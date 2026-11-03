@@ -53,7 +53,7 @@ async function exec(tabId, func, args = [], world = 'ISOLATED') {
   }
 }
 
-function makeBrowser(tabId) {
+function makeBrowser(tabId, commentsToRead) {
   const guard = async () => {
     const g = await exec(tabId, readGuard)
     if (g?.verify) throw new Stop('Instagram is asking for a check or has limited this account. Open Instagram in Chrome and sort it out, then run again.')
@@ -77,7 +77,7 @@ function makeBrowser(tabId) {
       }
       return cards
     },
-    comments: () => exec(tabId, readCommentsPage, [LIMITS.topComments]),
+    comments: () => exec(tabId, readCommentsPage, [commentsToRead]),
     async openVideo(url) {
       await navigate(tabId, url)
       await guard()
@@ -110,7 +110,7 @@ async function run(manual, delayMs = 0) {
     const memory = { ...saved } // reels opened before and found to have too few likes; changed by the run
 
     win = await chrome.windows.create({ url: 'about:blank', focused: false }) // no fixed size: a size that does not fit the screen is rejected
-    const browser = makeBrowser(win.tabs[0].id)
+    const browser = makeBrowser(win.tabs[0].id, Math.min(LIMITS.maxCommentsRead, Math.max(10, Math.round(Number(s.commentsPerVideo)) || DEFAULTS.commentsPerVideo)))
     let result
     try {
       result = await findVideos(browser, known, log, {

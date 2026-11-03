@@ -12,7 +12,7 @@ const say = (text, bad = false) => {
 async function load() {
   const { settings = {} } = await chrome.storage.local.get('settings')
   const s = { ...DEFAULTS, ...settings }
-  for (const k of ['repo', 'token', 'aiKey', 'aiModel', 'videosPerRun', 'minLikes', 'maxAgeDays', 'startHour', 'endHour']) $(k).value = s[k]
+  for (const k of ['repo', 'token', 'aiKey', 'aiModel', 'commentsPerVideo', 'videosPerRun', 'minLikes', 'maxAgeDays', 'startHour', 'endHour']) $(k).value = s[k]
   $('keywords').value = (s.keywords ?? DEFAULTS.keywords).join('\n')
   $('commentTopics').value = (s.commentTopics ?? DEFAULTS.commentTopics).join('\n')
 }
@@ -24,6 +24,7 @@ $('save').onclick = async () => {
     repo: $('repo').value.trim(),
     token: $('token').value.trim(),
     aiKey: $('aiKey').value.trim(),
+    commentsPerVideo: Math.min(LIMITS.maxCommentsRead, Math.max(10, Math.round(Number($('commentsPerVideo').value)) || DEFAULTS.commentsPerVideo)),
     aiModel: $('aiModel').value.trim(),
     minLikes: Math.max(0, Math.round(Number($('minLikes').value))),
     maxAgeDays: Math.min(365, Math.max(1, Math.round(Number($('maxAgeDays').value)) || DEFAULTS.maxAgeDays)),

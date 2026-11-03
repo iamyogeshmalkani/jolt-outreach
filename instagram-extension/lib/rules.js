@@ -55,7 +55,10 @@ export function topicMatchers(topics = DEFAULT_COMMENT_TOPICS) {
   }))
 }
 
-// Drops comments nobody should be shown: the video's own creator, very short or very long ones, repeats, and anything that fails the
+// Words in a comment: pieces separated by spaces that contain a letter or a digit (emoji, dashes and the like do not count).
+export const wordCount = (text) => String(text || '').split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length
+
+// Drops comments nobody should be shown: the video's own creator, comments of fewer than 5 words, very long ones, repeats, and anything that fails the
 // safety rules above. `rows` are { handle, text }; returns cleaned { handle, text } rows.
 export function cleanComments(rows, creator = '') {
   const seen = new Set()
@@ -65,7 +68,7 @@ export function cleanComments(rows, creator = '') {
     const text = String(row?.text || '').replace(/\s+/g, ' ').trim()
     const key = `${handle.toLowerCase()}\n${text.toLowerCase()}`
     if (!handle || handle.toLowerCase() === String(creator).toLowerCase() || seen.has(key)) continue
-    if (text.length < LIMITS.minCommentChars || text.length > LIMITS.maxCommentChars) continue
+    if (wordCount(text) < LIMITS.minCommentWords || text.length > LIMITS.maxCommentChars) continue
     if (BRAND_HANDLE.test(handle) || PROMO.test(text) || MINOR.test(text) || SENSITIVE.test(text) || SEXUAL.test(text)) continue
     seen.add(key)
     out.push({ handle, text })
@@ -87,14 +90,6 @@ export function matchTopics(rows, topics = DEFAULT_COMMENT_TOPICS) {
 // Both steps together: the comments read off one video that are about the topics.
 export const pickComments = (rows, creator = '', topics = DEFAULT_COMMENT_TOPICS) => matchTopics(cleanComments(rows, creator), topics)
 
-// A cheap, free first look before Claude: only comments that mention the topics or a wider set of phone and screen words are worth
-// sending, so most comments (reactions, jokes about the video, chatter) never cost a token.
-const HABIT_WORDS = /phone|scroll|screen|tiktok|insta|reels|social media|youtube|app\b|apps\b|online|notification|addict|brain|focus|attention|distract|sleep|procrastinat|productiv|detox|dopamine|hours|unproductive|lazy|motivat|wast|habit|quit|delete|limit|bored|rot\b|rotting|rotted/i
-export function likelyAboutHabits(rows, topics = DEFAULT_COMMENT_TOPICS) {
-  const matchers = topicMatchers(topics)
-  return rows.filter((row) => HABIT_WORDS.test(row.text) || matchers.some((m) => m.rx.test(row.text)))
-}
-
 // Labels rows Claude kept with the comment topics they mention, or a plain label when none (Claude's answer carries no label, to save tokens).
 export function labelTopics(rows, topics = DEFAULT_COMMENT_TOPICS) {
   const matchers = topicMatchers(topics)
@@ -111,8 +106,8 @@ export const LIMITS = {
   maxFails: 4,       // reels in a row that fail to open before the run gives up
   rejectDays: 7,     // a reel with too few likes is not opened again for this long
   maxFound: 500,     // the most reels kept in the list
-  topComments: 50,   // only the first this-many comments of each reel are read
-  minCommentChars: 12, // shorter comments are too short to tell what they are about
+  maxCommentsRead: 1000, // the most comments of one video that can be asked for in Settings
+  minCommentWords: 5, // comments with fewer words than this are skipped: too short to tell what they are about, and not worth sending to Claude
   maxCommentChars: 400,
 }
 

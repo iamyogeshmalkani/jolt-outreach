@@ -5,7 +5,7 @@
 //   comments() -> { ok, rows }                            the first comments of the opened video, as { handle, text }
 //   closeVideo()                                          back to the results
 //   pause(a, b)                                           a short, random wait
-import { DEFAULT_COMMENT_TOPICS, DEFAULT_KEYWORDS, LIMITS, cleanComments, labelTopics, likelyAboutHabits, matchTopics, parseCount, pickRunQueries, videoAgeDays, videoKey, videoPosted } from './rules.js'
+import { DEFAULT_COMMENT_TOPICS, DEFAULT_KEYWORDS, LIMITS, cleanComments, labelTopics, matchTopics, parseCount, pickRunQueries, videoAgeDays, videoKey, videoPosted } from './rules.js'
 
 export class Stop extends Error {}
 
@@ -85,7 +85,7 @@ export async function findVideos(browser, known, log = async () => {}, {
           const cleaned = cleanComments(rows, creator)
           let matches = null
           if (judge) {
-            const sent = likelyAboutHabits(cleaned, commentTopics) // only these cost anything
+            const sent = cleaned // every comment goes to Claude
             try {
               matches = sent.length ? labelTopics(await judge(sent), commentTopics) : []
               sentToClaude += sent.length
@@ -109,7 +109,7 @@ export async function findVideos(browser, known, log = async () => {}, {
           totalMatches += matches.length
           const counts = `${comments} comments${views !== null ? `, ${card.views} views` : ''}`
           await log(page?.ok
-            ? `@${creator}: kept (${counts}), ${matches.length} of the top ${rows.length} comments are about the topics`
+            ? `@${creator}: kept (${counts}), ${matches.length} of ${rows.length} comments are about the topics`
             : `@${creator}: kept (${counts}), but its comments did not load`)
         }
         await browser.closeVideo()

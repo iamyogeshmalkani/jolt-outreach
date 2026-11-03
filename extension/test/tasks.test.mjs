@@ -147,7 +147,7 @@ test('saves the comments about the topics with each kept video, and only reads c
   assert.equal(v.read, 4)
   assert.deepEqual(v.matches.map((c) => c.handle), ['ana', 'cy'], 'off-topic and the creator\'s own comments are left out')
   assert.deepEqual(v.matches[0].topics, ['screen time', 'brain rot'])
-  assert.match(lines.join('\n'), /2 of the top 4 comments are about the topics/)
+  assert.match(lines.join('\n'), /2 of 4 comments are about the topics/)
   assert.match(lines.join('\n'), /kept 2 with 5 comments about the topics/)
 })
 
@@ -161,7 +161,7 @@ test('a kept video whose comments will not load is still listed, with nothing re
   assert.match(lines.join('\n'), /comments did not load/)
 })
 
-test('Claude only sees comments that already look related, and its pick replaces the topic check', async () => {
+test('Claude sees every cleaned comment, and its pick replaces the topic check', async () => {
   const cards = [card(1)]
   const rows = [
     { handle: 'ana', text: 'honestly i lose my whole evenings to my phone now' },
@@ -171,18 +171,18 @@ test('Claude only sees comments that already look related, and its pick replaces
     { handle: 'dee', text: 'my screen time says 9 hours a day, brainrot is real' },
   ]
   const sent = []
-  const judge = async (rs) => { sent.push(rs.map((r) => r.handle)); return rs.filter((r) => r.handle !== 'dee') }
+  const judge = async (rs) => { sent.push(rs.map((r) => r.handle)); return rs.filter((r) => r.handle === 'ana') }
   const lines = []
   const out = await findVideos(fakeBrowser({ cards, commentRows: { ok: true, rows } }), empty(), async (l) => lines.push(l), { ...opts, judge })
-  assert.deepEqual(sent, [['ana', 'dee']], 'not the creator, the promotion, or the comment that has nothing to do with phones')
+  assert.deepEqual(sent, [['ana', 'cy', 'dee']], 'all of them, but not the creator or the promotion')
   assert.deepEqual(out.videos[0].matches, [{ handle: 'ana', text: rows[0].text, topics: ['digital habits'] }])
   assert.equal(out.aiError, '')
-  assert.match(lines.join('\n'), /2 comments sent to Claude/)
+  assert.match(lines.join('\n'), /3 comments sent to Claude/)
 })
 
-test('Claude is not asked at all when no comment looks related', async () => {
+test('Claude is not asked when there is no comment left to check', async () => {
   let asked = 0
-  const rows = [{ handle: 'cy', text: 'what a lovely song, I really love this video' }]
+  const rows = [{ handle: 'maker1', text: 'the creator replying on their own video here' }]
   const out = await findVideos(fakeBrowser({ cards: [card(1)], commentRows: { ok: true, rows } }), empty(), undefined, { ...opts, judge: async () => { asked++; return [] } })
   assert.equal(asked, 0)
   assert.deepEqual(out.videos[0].matches, [])

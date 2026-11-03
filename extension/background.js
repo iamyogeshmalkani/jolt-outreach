@@ -42,7 +42,7 @@ async function exec(tabId, func, args = [], world = 'ISOLATED') {
   return injected?.result
 }
 
-function makeBrowser(tabId) {
+function makeBrowser(tabId, commentsToRead) {
   const guard = async (hasResults = true) => {
     const g = await exec(tabId, readGuard)
     if (g?.verify) throw new Stop('TikTok is showing a verification check. Solve it in Chrome, then run again.')
@@ -67,7 +67,7 @@ function makeBrowser(tabId) {
       await guard()
       return exec(tabId, readOpenVideo)
     },
-    comments: () => exec(tabId, readCommentsPage, [LIMITS.topComments]),
+    comments: () => exec(tabId, readCommentsPage, [commentsToRead]),
     closeVideo: () => exec(tabId, closeVideo),
   }
 }
@@ -97,7 +97,7 @@ async function run(manual, delayMs = 0) {
     await store.remove(['seen', 'videos']) // left by older versions
 
     win = await chrome.windows.create({ url: 'about:blank', focused: false }) // no fixed size: a size that does not fit the screen is rejected
-    const browser = makeBrowser(win.tabs[0].id)
+    const browser = makeBrowser(win.tabs[0].id, Math.min(LIMITS.maxCommentsRead, Math.max(10, Math.round(Number(s.commentsPerVideo)) || DEFAULTS.commentsPerVideo)))
     let result
     try {
       result = await findVideos(browser, known, log, {

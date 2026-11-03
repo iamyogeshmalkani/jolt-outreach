@@ -131,7 +131,7 @@ def main():
         print("settings validation:", opts.inner_text("#msg"))
 
         # 4. a full run: search finds nothing, the hashtag does; old, unpopular and photo posts are left out
-        sw.evaluate("api => chrome.storage.local.set({settings: {repo: 'o/r', token: 'good', api, auto: false, videosPerRun: 40, minLikes: 1000, maxAgeDays: 60, startHour: 0, endHour: 24, paused: false, keywords: ['phone addiction']}})", api)
+        sw.evaluate("api => chrome.storage.local.set({settings: {repo: 'o/r', token: 'good', api, auto: false, videosPerRun: 40, commentsPerVideo: 60, minLikes: 1000, maxAgeDays: 60, startHour: 0, endHour: 24, paused: false, keywords: ['phone addiction']}})", api)
         popup.reload()
         popup.wait_for_function("!document.getElementById('run').disabled")
         popup.click("#run")
@@ -146,7 +146,7 @@ def main():
         assert by[CODES[2]]["likes"] == 2500 and by[CODES[5]]["likes"] is None
         assert all(v["topic"] == "phone addiction" and v["posted"] for v in reels)
         # the top 50 comments are read; with no Claude key the even ones (about screen time and brain rot) are kept by the topic list
-        assert all(v["read"] == 50 and len(v["matches"]) == 25 for v in reels), [(v["read"], len(v["matches"])) for v in reels]
+        assert all(v["read"] == 60 and len(v["matches"]) == 30 for v in reels), [(v["read"], len(v["matches"])) for v in reels]
         m = reels[0]["matches"][0]
         assert m["handle"].startswith("fan") and "screen time" in m["text"] and "screen time" in m["topics"], m
         assert not any("nice song" in c["text"] or "ignored" in c["text"] for v in reels for c in v["matches"])
@@ -174,11 +174,11 @@ def main():
         status = wait_idle(sw, timeout=420)
         assert not status.get("error"), status
         with_ai = json.loads(FILES["instagram_found.json"]["text"])
-        assert with_ai and len(CLAUDE_CALLS) == len(with_ai), (len(with_ai), len(CLAUDE_CALLS))
-        assert all(len(v["matches"]) == 13 for v in with_ai), [len(v["matches"]) for v in with_ai]
+        assert with_ai and len(CLAUDE_CALLS) == 2 * len(with_ai), (len(with_ai), len(CLAUDE_CALLS))
+        assert all(len(v["matches"]) == 15 for v in with_ai), [len(v["matches"]) for v in with_ai]
         sizes = {len(c["messages"][0]["content"].split("\n")) for c in CLAUDE_CALLS}
-        assert sizes == {25}, sizes
-        print(f"Claude picked the comments: {len(with_ai)} reels, one request each of {sizes} comments")
+        assert sizes == {20, 40}, sizes  # every comment is sent: 60 of them as 40 and 20
+        print(f"Claude picked the comments: {len(with_ai)} reels, requests of {sorted(sizes)} comments")
 
         # 5c. Claude failing does not fail the run: the topic list is used instead
         FILES.pop("instagram_found.json", None)
@@ -187,7 +187,7 @@ def main():
         status = wait_idle(sw, timeout=420)
         assert not status.get("error") and "Claude was not used" in status.get("message", ""), status
         fallback = json.loads(FILES["instagram_found.json"]["text"])
-        assert fallback and all(len(v["matches"]) == 25 for v in fallback)
+        assert fallback and all(len(v["matches"]) == 30 for v in fallback)
         print("Claude failure falls back to the topics")
 
         # 6. a login wall stops the run

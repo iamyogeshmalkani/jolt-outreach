@@ -108,7 +108,8 @@ export async function closeVideo() {
   return gone()
 }
 
-// Reads the first `max` comments of the opened video (TikTok lists the top ones first), scrolling just enough to load them.
+// Reads up to `max` comments of the opened video (TikTok lists the top ones first), scrolling to load more until there are enough or
+// no new ones arrive for a few scrolls (that is all of them).
 export async function readCommentsPage(max = 50) {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
   const items = () => document.querySelectorAll('[data-e2e="comment-level-1"]')
@@ -123,9 +124,13 @@ export async function readCommentsPage(max = 50) {
   const panel = [...document.querySelectorAll('div')]
     .filter((d) => d.scrollHeight > d.clientHeight + 50 && d.querySelector('[data-e2e="comment-level-1"]'))
     .pop()
-  for (let i = 0; i < 12 && items().length < max; i++) {
+  let stale = 0
+  for (let i = 0; i < 150 && items().length < max && stale < 4; i++) {
+    const before = items().length
     if (panel) panel.scrollTop = panel.scrollHeight
+    else items()[before - 1]?.scrollIntoView({ block: 'end' })
     await sleep(1100)
+    stale = items().length === before ? stale + 1 : 0
   }
   const rows = [...items()].slice(0, max).map((el) => {
     let c = el

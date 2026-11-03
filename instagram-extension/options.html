@@ -38,6 +38,9 @@
         brain rot, phone addiction or other digital habits that affect them. Without a key, or if Claude can't be reached, the list below is used instead.
         The key stays in this Chrome and is only ever sent to Anthropic.
       </p>
+      <label>Comments to read per video <span class="hint">(all of them if there are fewer; each one is sent to Claude, about 25 tokens per comment, and reading takes about a second per 15 comments)</span>
+        <input id="commentsPerVideo" type="number" min="10" max="1000" />
+      </label>
       <label>Claude API key
         <input id="aiKey" type="password" autocomplete="off" placeholder="sk-ant-…" />
       </label>
@@ -55,7 +58,7 @@
       <p class="hint">
         For each reel that qualifies, the top 50 comments are read. If Claude is not used, the ones that mention any of these are saved with it. One entry per line.
         Spacing and hyphens don't matter ("brain rot" also finds "brainrot"), and an entry can be the start of a word
-        ("procrastinat" finds procrastinating). Comments that look like they come from a minor, touch on self-harm, are adult, or are promotions are never saved.
+        ("procrastinat" finds procrastinating). Comments of fewer than 5 words are skipped. Comments that look like they come from a minor, touch on self-harm, are adult, or are promotions are never saved.
       </p>
       <label>Comment topics
         <textarea id="commentTopics" rows="10" autocomplete="off"></textarea>

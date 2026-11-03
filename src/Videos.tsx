@@ -177,7 +177,7 @@ export default function Videos({ platform, onPlatform, loaded, onRefresh }: {
                     <p className="hint">
                       {v.read === 0
                         ? 'The comments could not be read for this video.'
-                        : `${v.matches.length} of the top ${v.read ?? '?'} comments ${v.matches.length === 1 ? 'is' : 'are'} about the topics.`}
+                        : `${v.matches.length} of ${v.read ?? '?'} comments ${v.matches.length === 1 ? 'is' : 'are'} about the topics.`}
                     </p>
                     {v.matches.length > 0 && (
                       <ul>

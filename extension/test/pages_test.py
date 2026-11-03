@@ -66,6 +66,13 @@ def main():
         assert not any("must be ignored" in r["text"] for r in got["rows"])
         print(f"readCommentsPage ok: {len(got['rows'])} comments, first = {got['rows'][0]}")
         page.evaluate(fn("closeVideo"))
+        page.set_content(search_html())
+        page.evaluate(fn("clickCard", "'/@maker1/video/1'"))
+        page.evaluate(fn("readOpenVideo"))
+        everything = page.evaluate(fn("readCommentsPage", "300"))
+        assert everything["ok"] and len(everything["rows"]) == 85, len(everything["rows"])  # the mock has 85 and then stops growing
+        print("readCommentsPage reads all comments when asked for more than there are: 85")
+        page.evaluate(fn("closeVideo"))
 
         # a video with no caption still counts as opened, and can be closed again
         page.set_content(search_html())

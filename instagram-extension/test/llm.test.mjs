@@ -33,17 +33,18 @@ test('sends the documented request and reads the text block', async () => {
     assert.equal(headers['anthropic-version'], '2023-06-01')
     assert.equal(headers['anthropic-dangerous-direct-browser-access'], 'true')
     assert.equal(body.model, DEFAULT_MODEL)
+    assert.deepEqual(body.thinking, { type: 'disabled' }, 'otherwise the model uses its whole allowance thinking and writes nothing')
     assert.equal(body.system, 'be brief')
     for (const banned of ['temperature', 'top_p', 'top_k', 'prefill']) assert.ok(!(banned in body), banned)
   } finally { server.close() }
 })
 
-test('uses the model from the settings, and retries without the effort setting if the model does not take it', async () => {
-  const { seen, server, api } = await fake((body) => (body.output_config ? [400, { error: { message: 'output_config.effort is not supported for this model' } }] : text('ok')))
+test('uses the model from the settings, and retries without the thinking setting if the model does not take it', async () => {
+  const { seen, server, api } = await fake((body) => (body.thinking ? [400, { error: { message: 'thinking is not supported for this model' } }] : text('ok')))
   try {
     assert.equal(await ask(cfg(api, { model: ' claude-other ' }), 's', 'u'), 'ok')
     assert.equal(seen[0].body.model, 'claude-other')
-    assert.ok(!('output_config' in seen[1].body))
+    assert.ok(!('thinking' in seen[1].body))
   } finally { server.close() }
 })
 
@@ -71,6 +72,15 @@ test('reads the numbers the model keeps, ignoring ones that do not exist', () =>
   assert.throws(() => parseKept('[0,]', 3), FormatError)
 })
 
+test('reads a bare list of numbers and "none" as well, and says when the model ran out of room', async () => {
+  assert.deepEqual([...parseKept('0, 3', 5)], [0, 3])
+  assert.deepEqual([...parseKept('None', 5)], [])
+  assert.deepEqual([...parseKept('No comments.', 5)], [])
+  assert.throws(() => parseKept('I think comment 3 is relevant', 5), FormatError)
+  const { server, api } = await fake(() => [200, { stop_reason: 'max_tokens', content: [{ type: 'thinking', thinking: '' }] }])
+  try { await assert.rejects(ask(cfg(api), 's', 'u'), /ran out of room/) } finally { server.close() }
+})
+
 test('keeps the comments the model picks, and sends short numbered lines instead of JSON', async () => {
   const { seen, server, api } = await fake(() => text('[1,3]'))
   try {
@@ -87,7 +97,7 @@ test('is cheap: a short instruction, long comments cut, and room for only a shor
     await pickRelevant(cfg(api), [{ handle: 'a', text: 'x'.repeat(400) }, ...rows(9)])
     const [{ body }] = seen
     assert.equal(body.messages[0].content.split('\n')[0], '0|' + 'x'.repeat(220))
-    assert.equal(body.max_tokens, 20 + 4 * 10)
+    assert.equal(body.max_tokens, 100 + 6 * 10)
     assert.ok(JUDGE_SYSTEM.length < 900, 'the instruction stays short')
     assert.ok(!('topic' in JSON.parse(JSON.stringify(body))), 'no labels are asked for')
   } finally { server.close() }

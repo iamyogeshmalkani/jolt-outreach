@@ -62,11 +62,11 @@ test('comments about the topics are kept, matched loosely, and the rest are not'
   const pick = (texts, topics) => r.pickComments(texts.map((t) => (typeof t === 'string' ? row(t) : t)), 'maker', topics).map((c) => c.text)
   const topics = ['screen time', 'brain rot', 'phone addict', 'procrastinat', 'digital detox']
   assert.deepEqual(pick([
-    'my screen time is insane lately', 'My ScreenTime says 9 hours', 'this is such brainrot honestly', 'brain-rot content everywhere',
+    'my screen time is insane lately', 'My ScreenTime says 9 hours', 'this is such brainrot honestly', 'brain-rot content everywhere these days',
     'i have a real phone addiction', 'procrastinating again instead of working', 'doing a digital detox this month',
     'what a lovely song, I love it', 'unscreen timed', 'cannot believe how good this is',
   ], topics), [
-    'my screen time is insane lately', 'My ScreenTime says 9 hours', 'this is such brainrot honestly', 'brain-rot content everywhere',
+    'my screen time is insane lately', 'My ScreenTime says 9 hours', 'this is such brainrot honestly', 'brain-rot content everywhere these days',
     'i have a real phone addiction', 'procrastinating again instead of working', 'doing a digital detox this month',
   ])
   assert.deepEqual(r.pickComments([row('screen time is high for me')], 'maker', topics)[0].topics, ['screen time'])
@@ -78,6 +78,9 @@ test('comments are not kept when they are the creator, too short or long, repeat
   const keep = (rows) => r.pickComments(rows, 'Maker', t).length
   assert.equal(keep([{ handle: 'maker', text: 'my screen time is high' }]), 0, 'the creator, ignoring case')
   assert.equal(keep([{ handle: 'a', text: 'screen time' }]), 0, 'too short')
+  assert.equal(keep([{ handle: 'a', text: 'my screen time is' }]), 0, 'four words')
+  assert.equal(keep([{ handle: 'a', text: 'my screen time is 😭😭 - -' }]), 0, 'four words and some symbols')
+  assert.equal(keep([{ handle: 'a', text: 'my screen time is bad' }]), 1, 'five words')
   assert.equal(keep([{ handle: 'a', text: 'screen time ' + 'x'.repeat(400) }]), 0, 'too long')
   assert.equal(keep([{ handle: 'a', text: 'my screen time is high' }, { handle: 'a', text: 'My screen time is  high' }]), 1, 'same person, same words')
   assert.equal(keep([{ handle: 'a', text: 'my screen time is high' }, { handle: 'b', text: 'my screen time is high' }]), 2, 'different people')
@@ -103,4 +106,13 @@ test('handles are treated as brands only when they say so, not when a word is pa
   const keep = (handle) => r.pickComments([{ handle, text: 'my screen time is high' }], 'maker', ['screen time']).length
   for (const ok of ['happy_dev', 'robotics_fan', 'official_lkhamilton', 'shopaholic', 'storeyteller', 'anna.apple']) assert.equal(keep(ok), 1, ok)
   for (const brand of ['official_deals', 'best.shop', 'coupon_king', 'jolt.io', 'ugc_agency', 'the_app', 'mybot']) assert.equal(keep(brand), brand === 'mybot' ? 1 : 0, brand)
+})
+
+test('words are counted by pieces that contain a letter or digit', () => {
+  assert.equal(r.wordCount('my screen time is bad'), 5)
+  assert.equal(r.wordCount('  so   many   spaces  '), 3)
+  assert.equal(r.wordCount('😭😭 - \u2014 ... 12'), 1)
+  assert.equal(r.wordCount("don't stop"), 2)
+  assert.equal(r.wordCount('これは 日本語 です'), 3)
+  assert.equal(r.wordCount(''), 0)
 })

@@ -9,6 +9,7 @@ export const DEFAULTS = {
   maxAgeDays: 60,     // and must be posted within this many days
   paused: false,      // set automatically when Instagram asks for a login or verification
   keywords: DEFAULT_KEYWORDS, // searches, e.g. "phone addiction"; edited in Settings
+  commentsPerVideo: 300, // how many of a video's comments are read (all of them if it has fewer); every one is sent to Claude
   aiKey: '',          // a Claude (Anthropic) API key; with it, Claude decides which comments are about the writer's own habits
   aiModel: '',        // empty means the default (see llm.js)
   commentTopics: DEFAULT_COMMENT_TOPICS, // used when Claude is not; edited in Settings

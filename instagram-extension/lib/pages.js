@@ -68,7 +68,8 @@ export async function readOpenVideo() {
   }
 }
 
-// Reads the first `max` comments of the opened reel (Instagram lists the top ones first), scrolling just enough to load them.
+// Reads up to `max` comments of the opened reel (Instagram lists the top ones first), scrolling to load more until there are enough or
+// no new ones arrive for a few scrolls (that is all of them).
 // It does not depend on Instagram's list markup, which changes. It walks the page in reading order: a profile link followed by the text
 // beside it is one comment (the avatar link and the name link before the text count once; @mentions inside text, "Reply" and like
 // counts are ignored). Every real comment shows how long ago it was written ("4w", a <time> element), and a profile link with text but
@@ -151,10 +152,14 @@ export async function readCommentsPage(max = 50) {
     return null
   }
   const panel = scroller(allRows()[0].el)
-  for (let i = 0; i < 12 && allRows().length < max; i++) {
+  let stale = 0
+  for (let i = 0; i < 150 && stale < 4; i++) {
+    const before = allRows()
+    if (before.length >= max) break
     if (panel) panel.scrollTop = panel.scrollHeight
-    else allRows().at(-1)?.el.scrollIntoView({ block: 'end' })
+    else before.at(-1)?.el.scrollIntoView({ block: 'end' })
     await sleep(1100)
+    stale = allRows().length === before.length ? stale + 1 : 0
   }
   return { ok: true, rows: allRows().slice(0, max).map(({ handle, text }) => ({ handle, text })) }
 }

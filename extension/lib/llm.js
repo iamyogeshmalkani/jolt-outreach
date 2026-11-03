@@ -1,8 +1,9 @@
 // Claude (Anthropic) decides which comments are really about the writer's own phone and screen habits. Called with plain fetch, because a
 // Chrome extension has no build step to bundle an SDK. The API key is typed into Settings and kept in this Chrome only.
 //
-// Kept cheap on purpose: the caller sends only comments that already look related (see likelyAboutHabits in rules.js), each one as a short
-// numbered line, with a short instruction, and Claude answers with just the numbers to keep. Roughly 25 tokens in per comment, a few out.
+// Every comment of a reel is sent, but cheaply: each as one short numbered line, with a short instruction, and Claude answers with just
+// the numbers to keep. Roughly 25 tokens in per comment and a handful out. Thinking is switched off: the model otherwise spends the
+// whole answer allowance thinking and writes nothing.
 export const DEFAULT_MODEL = 'claude-haiku-5-5'
 const API = 'https://api.anthropic.com'
 export const modelOf = (cfg) => (cfg.model || '').trim() || DEFAULT_MODEL
@@ -32,7 +33,7 @@ export async function ask(cfg, system, userText, maxTokens = 100) {
   const body = {
     model: modelOf(cfg),
     max_tokens: maxTokens,
-    output_config: { effort: 'low' },
+    thinking: { type: 'disabled' },
     system,
     messages: [{ role: 'user', content: userText }],
   }
@@ -51,8 +52,8 @@ export async function ask(cfg, system, userText, maxTokens = 100) {
     let res = await send()
     if (res.status === 400) {
       const peek = await res.clone().json().catch(() => null)
-      if (/effort|output_config/i.test(peek?.error?.message || '')) {
-        delete body.output_config // a model without the effort setting
+      if (/thinking|effort|output_config/i.test(peek?.error?.message || '')) {
+        delete body.thinking // a model that does not take the setting
         res = await send()
       }
     }
@@ -62,23 +63,33 @@ export async function ask(cfg, system, userText, maxTokens = 100) {
     }
     const data = await res.json().catch(() => null)
     if (data?.stop_reason === 'refusal') throw new Error('Claude declined this request.')
-    return (data?.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('')
+    const text = (data?.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('')
+    if (!text.trim() && data?.stop_reason === 'max_tokens') throw new FormatError('Claude ran out of room before it wrote an answer.')
+    return text
   } catch (e) {
     if (e instanceof TypeError) throw new Error('Could not reach Claude. Check your internet connection.')
     throw e
   }
 }
 
-// The model answers with the numbers to keep, e.g. [0,3]. Numbers that do not exist are ignored; {"id": n} items are accepted too.
+// The model answers with the numbers to keep, e.g. [0,3]. Numbers that do not exist are ignored; {"id": n} items are accepted too, and so
+// are a bare "0, 3" and "none".
 export function parseKept(text, count) {
   const start = text.indexOf('[')
   const end = text.lastIndexOf(']')
-  if (start < 0 || end < start) throw new FormatError('The model did not return a list.')
   let list
-  try {
-    list = JSON.parse(text.slice(start, end + 1))
-  } catch {
-    throw new FormatError('The model returned a list that could not be read.')
+  if (start >= 0 && end >= start) {
+    try {
+      list = JSON.parse(text.slice(start, end + 1))
+    } catch {
+      throw new FormatError('The model returned a list that could not be read.')
+    }
+  } else if (/^[\s\d,]+$/.test(text) && /\d/.test(text)) {
+    list = text.split(',').map((n) => parseInt(n, 10)).filter((n) => !Number.isNaN(n))
+  } else if (/^\W*(none|no comments?|nothing|empty)\W*$/i.test(text)) {
+    list = []
+  } else {
+    throw new FormatError('The model did not return a list.')
   }
   if (!Array.isArray(list)) throw new FormatError('The model did not return a list.')
   const kept = new Set()
@@ -100,7 +111,7 @@ export async function pickRelevant(cfg, rows, { log = async () => {} } = {}) {
     let keep
     for (let attempt = 0; attempt < 2 && !keep; attempt++) {
       try {
-        keep = parseKept(await ask(cfg, JUDGE_SYSTEM, lines, 20 + 4 * group.length), group.length)
+        keep = parseKept(await ask(cfg, JUDGE_SYSTEM, lines, 100 + 6 * group.length), group.length)
       } catch (e) {
         if (!(e instanceof FormatError)) throw e
         if (attempt) await log(`Claude gave an answer that could not be read (${e.message}). Skipped ${group.length} comments.`)
@@ -115,7 +126,7 @@ export async function pickRelevant(cfg, rows, { log = async () => {} } = {}) {
 
 // Used by the settings page: one tiny real request, so a wrong key or model shows up straight away.
 export async function check(cfg) {
-  const text = await ask(cfg, 'Reply with the single word OK.', 'Ready?', 20)
+  const text = await ask(cfg, 'Reply with the single word OK.', 'Ready?', 40)
   if (!text.trim()) throw new Error('Claude answered with nothing.')
   return modelOf(cfg)
 }

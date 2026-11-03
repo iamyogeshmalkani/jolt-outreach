@@ -11,6 +11,7 @@ export const DEFAULTS = {
   paused: false,      // set automatically when TikTok asks for a login or verification
   keywords: DEFAULT_KEYWORDS,       // the topics to search for, e.g. "digital detox"; edited in Settings
   topicsVersion: 2,   // when the default topics change, a browser that saved an older list gets the new one once
+  commentsPerVideo: 300, // how many of a video's comments are read (all of them if it has fewer); every one is sent to Claude
   aiKey: '',          // a Claude (Anthropic) API key; with it, Claude decides which comments are about the writer's own habits
   aiModel: '',        // empty means the default (see llm.js)
   commentTopics: DEFAULT_COMMENT_TOPICS, // a comment is saved when it is about one of these; edited in Settings

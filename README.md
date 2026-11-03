@@ -10,7 +10,7 @@ It has two parts, and nothing to run in a terminal:
 
 - **The Jolt finder** is a Chrome extension. It runs in your own Chrome, where you are already
   logged into TikTok, and only reads pages: it searches TikTok for the topics you list in Settings,
-  opens the most-viewed recent results to check their comment count, reads the top 50 comments of each
+  opens the most-viewed recent results to check their comment count, reads the comments of each
   video that qualifies, and saves the video and the comments about your topics to the `data` branch of
   this repo. A comment is kept when Claude says the writer is talking about their own screen time or digital
   habits (see **Claude checks the comments** below), or, with no Claude key, when it mentions a word or phrase in
@@ -29,19 +29,21 @@ never saved to the repo or the page, so don't paste it anywhere public. Claude k
 talks about their own high screen time, doomscrolling, brain rot, phone or social media addiction, lost focus or
 productivity, or trying to cut back, and drops reactions to the video, chatter, promotion and crisis topics.
 If Claude can't be reached (wrong key, no credit), the run goes on with the Comment topics list and says so.
-It is built to use few tokens:
-- Comments are cleaned locally first (the creator's own, too short or long, repeats, minors, promotions).
-- Only comments that mention a phone or screen word are sent at all; reactions and chatter cost nothing.
-- Each comment goes as one short numbered line (cut at 220 characters) with a short instruction, up to 40 per
-  request, and Claude answers with just the numbers to keep. Roughly 25 tokens in per comment and a handful out.
-- Only reels and videos that already qualify are read, and the default model is the small, cheap
+Every comment that is read is sent to Claude, in a way that keeps the cost low:
+- Comments of fewer than 5 words, the creator's own, repeats, and ones from minors or promotions are dropped locally first.
+- Each remaining comment goes as one short numbered line (cut at 220 characters) with a short instruction, up to
+  40 per request. Claude's thinking is switched off and it answers with just the numbers to keep, about 10 tokens.
+- That is roughly 25 tokens in per comment, so a reel with 300 comments is about 7,500 tokens on the small, cheap
   `claude-haiku-5-5` (changeable in Settings).
+- Only reels and videos that already qualify are read, and each video's comments are read once.
+- **Comments to read per video** (Settings, default 300) sets how many comments are loaded by scrolling. A video
+  with fewer is read in full. Loading takes about a second per 15 comments.
 
 **Comment topics.** The default list covers screen time, high screen time, brain rot, doomscrolling,
 phone and social media addiction, digital detox, dopamine, digital and phone habits, productivity,
 procrastination, focus and distraction. Each entry is a word or phrase. Case, spacing and hyphens don't
 matter ("brain rot" also finds "brainrot"), and an entry can be the start of a word ("procrastinat"
-finds procrastinating). Comments from the video's own creator, very short or very long ones, repeats,
+finds procrastinating). Comments from the video's own creator, comments of fewer than 5 words, very long ones, repeats,
 and any that look like they come from a minor, mention self-harm, are adult, or are promotions are never saved.
 
 ## Set up the extension (once, about 3 minutes)
@@ -78,7 +80,7 @@ The token stays in your Chrome and is only ever sent to GitHub. It can only touc
 
 A second, separate extension that does the same job on Instagram: it searches your keywords, keeps recent,
 popular reels, and lists their links on the same page, under its **Instagram** button. Like the TikTok one, it
-reads the top 50 comments of each kept reel and saves the ones about the writer's own digital habits (checked by
+reads the comments of each kept reel and saves the ones about the writer's own digital habits (checked by
 Claude if you add a key, otherwise by the Comment topics list in its Settings).
 
 1. Download https://iamyogeshmalkani.github.io/jolt-outreach/jolt-instagram-extension.zip, unzip it and load

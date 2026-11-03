@@ -147,16 +147,16 @@ test('saves the comments about the topics with each kept reel, and reads comment
   assert.equal(v.read, 4)
   assert.deepEqual(v.matches.map((c) => c.handle), ['ana', 'cy'], 'off-topic and the creator\'s own comments are left out')
   assert.deepEqual(v.matches[0].topics, ['screen time', 'brain rot'])
-  assert.match(lines.join('\n'), /2 of the top 4 comments are about their habits/)
+  assert.match(lines.join('\n'), /2 of 4 comments are about their habits/)
   assert.match(lines.join('\n'), /kept 1 with 2 comments about digital habits/)
 })
 
-test('Claude only sees comments that look related, its pick replaces the topic check, and if it fails the topics are used', async () => {
+test('Claude sees every cleaned comment, its pick replaces the topic check, and if it fails the topics are used', async () => {
   const cards = [card(1), card(2)]
   const sent = []
   const judge = async (rs) => { sent.push(rs.map((r) => r.handle)); return rs.filter((r) => r.handle === 'cy') }
   const out = await findVideos(fakeBrowser({ cards, commentRows: { ok: true, rows } }), empty(), undefined, { ...opts, judge })
-  assert.deepEqual(sent[0], ['ana', 'cy'], 'not the creator, and not the comment about the song')
+  assert.deepEqual(sent[0], ['ana', 'ben', 'cy'], 'all of them, but not the creator')
   assert.deepEqual(out.videos[0].matches.map((m) => [m.handle, m.topics]), [['cy', ['digital detox', 'detox', 'procrastinat']]])
 
   let asked = 0

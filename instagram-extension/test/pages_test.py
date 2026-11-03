@@ -76,6 +76,12 @@ def main():
         assert not any(r["text"] in ("Reply", "3d", "12 likes") or r["text"].startswith("View") for r in got["rows"])
         print(f"readCommentsPage (no lists) ok: {len(got['rows'])} comments, first = {first}")
 
+        # asking for more than there are reads them all (the mock has 85 and then stops growing)
+        show(f"https://www.instagram.com/reel/{CODES[1]}/", reel_html(CODES[1]))
+        page.evaluate(fn("readOpenVideo"))
+        assert len(page.evaluate(fn("readCommentsPage", "300"))["rows"]) == 85
+        print("readCommentsPage reads all comments when asked for more than there are: 85")
+
         # shaped like the real page: suggested accounts (profile links with text, no time) must not be read as comments
         show(f"https://www.instagram.com/reel/{CODES[1]}/", reel_html(CODES[1], "real"))
         page.evaluate(fn("readOpenVideo"))
