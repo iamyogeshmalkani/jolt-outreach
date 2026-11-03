@@ -1,13 +1,14 @@
 // Runs the finder inside your own Chrome: opens a small TikTok window, looks for recent popular videos on your topics the way a
-// person would, and saves the links to the `data` branch of your GitHub repo, where the hosted page picks them up.
+// person would, reads the top comments of each one, and saves the links and the comments about your topics to the `data` branch of your GitHub repo, where the hosted page picks them up.
 import { publishVideos, fetchKnown } from './lib/github.js'
-import { clickCard, closeVideo, readGuard, readOpenVideo, readSearchCards } from './lib/pages.js'
-import { DEFAULTS } from './lib/settings.js'
+import { clickCard, closeVideo, readCommentsPage, readGuard, readOpenVideo, readSearchCards } from './lib/pages.js'
+import { DEFAULTS, withDefaults } from './lib/settings.js'
 import { Stop, findVideos } from './lib/tasks.js'
 import { LIMITS } from './lib/rules.js'
+import { pickRelevant } from './lib/llm.js'
 
 const store = chrome.storage.local
-const getSettings = async () => ({ ...DEFAULTS, ...((await store.get('settings')).settings || {}) })
+const getSettings = async () => withDefaults((await store.get('settings')).settings || {})
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const pause = (a = 1.5, b = 4) => sleep((a + Math.random() * (b - a)) * 1000)
 
@@ -66,6 +67,7 @@ function makeBrowser(tabId) {
       await guard()
       return exec(tabId, readOpenVideo)
     },
+    comments: () => exec(tabId, readCommentsPage, [LIMITS.topComments]),
     closeVideo: () => exec(tabId, closeVideo),
   }
 }
@@ -99,12 +101,13 @@ async function run(manual, delayMs = 0) {
     let result
     try {
       result = await findVideos(browser, known, log, {
-        competitors: s.competitors,
         keywords: s.keywords,
         checks: Math.min(LIMITS.maxVideos, Math.max(1, Math.round(Number(s.videosPerRun)) || DEFAULTS.videosPerRun)),
         minComments: Number(s.minComments) || DEFAULTS.minComments,
         minViews: Number.isFinite(Number(s.minViews)) ? Number(s.minViews) : DEFAULTS.minViews,
         maxAgeDays: Number(s.maxAgeDays) || DEFAULTS.maxAgeDays,
+        commentTopics: s.commentTopics,
+        judge: s.aiKey?.trim() ? (rows) => pickRelevant({ key: s.aiKey, model: s.aiModel, ...(s.aiApi ? { api: s.aiApi } : {}) }, rows, { log }) : null, // `aiApi` is only set by tests
         memory,
       })
     } finally {
@@ -113,18 +116,20 @@ async function run(manual, delayMs = 0) {
     }
 
     const found = result.videos.length
+    const comments = result.videos.reduce((n, v) => n + v.matches.length, 0)
     if (found) await publishVideos(cfg, result.videos)
 
     if (result.stopped) {
       if (!manual) await store.set({ settings: { ...s, paused: true } })
-      await patchStatus({ error: result.stopped, message: found ? `Saved ${found} videos before stopping.` : '' })
+      await patchStatus({ error: result.stopped, message: found ? `Saved ${found} videos and ${comments} comments before stopping.` : '' })
     } else {
-      await patchStatus({ message: found ? `Saved ${found} videos. The page shows them within about 5 minutes.` : 'No new videos this time.' })
+      const note = result.aiError ? ` Claude was not used for part of this run: ${result.aiError}` : ''
+      await patchStatus({ message: (found ? `Saved ${found} videos and ${comments} comments. The page shows them within about 5 minutes.` : 'No new videos this time.') + note })
     }
     await patchStatus({ lastRun: { at: Date.now(), found } })
     chrome.action.setBadgeBackgroundColor({ color: '#b5fc4f' })
     chrome.action.setBadgeText({ text: found ? String(found) : '' })
-    await log(result.stopped ? `Stopped: ${result.stopped}` : `Done: ${found} videos`)
+    await log(result.stopped ? `Stopped: ${result.stopped}` : `Done: ${found} videos, ${comments} comments`)
   } catch (e) {
     await patchStatus({ error: e.message || String(e) })
     await log(`Failed: ${e.message || e}`)

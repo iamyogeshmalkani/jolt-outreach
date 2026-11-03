@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Jolt Instagram finder</title>
+    <link rel="stylesheet" href="ui.css" />
+  </head>
+  <body class="popup">
+    <h1><i class="mark"></i>Jolt Instagram finder</h1>
+    <p id="state" class="state" role="status"></p>
+    <p id="error" class="error" hidden></p>
+    <div class="row">
+      <button id="run" class="primary">Find reels now</button>
+    </div>
+    <button id="resume" class="primary" hidden>Resume automatic runs</button>
+    <label class="check"><input id="auto" type="checkbox" /> Also run by itself every hour</label>
+    <p id="hours" class="hint"></p>
+    <details>
+      <summary>What happened</summary>
+      <pre id="log"></pre>
+    </details>
+    <p class="links"><a id="settings" href="#">Settings</a> <a id="page" href="#" target="_blank">Open the page</a></p>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

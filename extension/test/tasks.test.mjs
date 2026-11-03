@@ -12,7 +12,7 @@ const card = (n, { age = 5, views = '50K', who = 'maker' + n } = {}) => ({
 const empty = () => ({ keys: new Set() })
 
 // Stands in for Chrome: `comments` maps a video's url to the comment count shown when it is opened.
-function fakeBrowser({ cards, comments = {}, stopOnOpen, noOpen = [] }) {
+function fakeBrowser({ cards, comments = {}, stopOnOpen, noOpen = [], commentRows = { ok: true, rows: [] } }) {
   const calls = []
   return {
     calls,
@@ -24,11 +24,12 @@ function fakeBrowser({ cards, comments = {}, stopOnOpen, noOpen = [] }) {
       if (noOpen.includes(u)) return { opened: false, markers: ['x'] }
       return { opened: true, caption: 'opened ' + u.slice(-3), comments: comments[u] ?? '40', markers: [] }
     },
+    comments: async () => { calls.push(['comments']); return typeof commentRows === 'function' ? commentRows() : commentRows },
     closeVideo: async () => { calls.push(['close']) },
   }
 }
 const opened = (b) => b.calls.filter(([k]) => k === 'open').map(([, u]) => u)
-const opts = { competitors: {}, keywords: ['one topic'], checks: 20 }
+const opts = { keywords: ['one topic'], checks: 20 }
 
 test('keeps recent, popular videos with enough comments, and records what the page shows', async () => {
   const cards = [card(1), card(2, { views: '1.2M' })]
@@ -36,7 +37,7 @@ test('keeps recent, popular videos with enough comments, and records what the pa
   const out = await findVideos(fakeBrowser({ cards, comments: { [cards[1].url]: '1,234' } }), empty(), async (l) => lines.push(l), opts)
   assert.equal(out.videos.length, 2)
   const v = out.videos.find((x) => x.url === cards[1].url)
-  assert.deepEqual(Object.keys(v).sort(), ['caption', 'comments', 'creator', 'found', 'posted', 'topic', 'url', 'views'])
+  assert.deepEqual(Object.keys(v).sort(), ['caption', 'comments', 'creator', 'found', 'matches', 'posted', 'read', 'topic', 'url', 'views'])
   assert.equal(v.views, 1_200_000)
   assert.equal(v.comments, 1234)
   assert.equal(v.topic, 'one topic')
@@ -83,7 +84,7 @@ test('the limits come from the settings', async () => {
 test('a video listed from one search is not listed again by another', async () => {
   const cards = [card(1)]
   const b = fakeBrowser({ cards })
-  const out = await findVideos(b, empty(), undefined, { competitors: {}, keywords: ['a', 'b', 'c'], checks: 12 })
+  const out = await findVideos(b, empty(), undefined, { keywords: ['a', 'b', 'c'], checks: 12 })
   assert.equal(out.videos.length, 1)
   assert.equal(opened(b).length, 1)
 })
@@ -99,7 +100,7 @@ test('opens no more videos than a run is allowed to check', async () => {
 test('stops after enough videos are found', async () => {
   let n = 0
   const cards = () => Array.from({ length: 12 }, () => card(++n))
-  const out = await findVideos(fakeBrowser({ cards }), empty(), undefined, { competitors: {}, keywords: ['a', 'b', 'c', 'd', 'e', 'f'], checks: 100 })
+  const out = await findVideos(fakeBrowser({ cards }), empty(), undefined, { keywords: ['a', 'b', 'c', 'd', 'e', 'f'], checks: 100 })
   assert.equal(out.videos.length, 40)
 })
 
@@ -126,4 +127,77 @@ test('search results without a readable video number or view count are still con
   assert.equal(out.videos.length, 1)
   assert.equal(out.videos[0].views, null)
   assert.equal(out.videos[0].posted, null)
+})
+
+test('saves the comments about the topics with each kept video, and only reads comments of kept videos', async () => {
+  const cards = [card(1), card(2), card(3)]
+  const rows = [
+    { handle: 'ana', text: 'My screen time is 11 hours a day, brainrot for real' },
+    { handle: 'ben', text: 'love this song so much, the editing is great' },
+    { handle: 'maker1', text: 'the creator replying about screen time on their own video' },
+    { handle: 'cy', text: 'trying a digital detox this week, procrastinating less' },
+  ]
+  const comments = { [cards[2].url]: '3' }
+  const lines = []
+  const b = fakeBrowser({ cards, comments, commentRows: { ok: true, rows } })
+  const out = await findVideos(b, empty(), async (l) => lines.push(l), { ...opts, commentTopics: ['screen time', 'brain rot', 'digital detox', 'procrastinat'] })
+  assert.equal(out.videos.length, 2)
+  assert.equal(b.calls.filter(([k]) => k === 'comments').length, 2, 'the video with too few comments is not read')
+  const v = out.videos.find((x) => x.creator === 'maker1')
+  assert.equal(v.read, 4)
+  assert.deepEqual(v.matches.map((c) => c.handle), ['ana', 'cy'], 'off-topic and the creator\'s own comments are left out')
+  assert.deepEqual(v.matches[0].topics, ['screen time', 'brain rot'])
+  assert.match(lines.join('\n'), /2 of the top 4 comments are about the topics/)
+  assert.match(lines.join('\n'), /kept 2 with 5 comments about the topics/)
+})
+
+test('a kept video whose comments will not load is still listed, with nothing read', async () => {
+  const cards = [card(1)]
+  const lines = []
+  const out = await findVideos(fakeBrowser({ cards, commentRows: { ok: false, rows: [] } }), empty(), async (l) => lines.push(l), opts)
+  assert.equal(out.videos.length, 1)
+  assert.equal(out.videos[0].read, 0)
+  assert.deepEqual(out.videos[0].matches, [])
+  assert.match(lines.join('\n'), /comments did not load/)
+})
+
+test('Claude only sees comments that already look related, and its pick replaces the topic check', async () => {
+  const cards = [card(1)]
+  const rows = [
+    { handle: 'ana', text: 'honestly i lose my whole evenings to my phone now' },
+    { handle: 'maker1', text: 'the creator replying about screen time on their own video' },
+    { handle: 'ben', text: 'screen time for kids at www.example.com is great' },
+    { handle: 'cy', text: 'what a lovely song, I really love this video' },
+    { handle: 'dee', text: 'my screen time says 9 hours a day, brainrot is real' },
+  ]
+  const sent = []
+  const judge = async (rs) => { sent.push(rs.map((r) => r.handle)); return rs.filter((r) => r.handle !== 'dee') }
+  const lines = []
+  const out = await findVideos(fakeBrowser({ cards, commentRows: { ok: true, rows } }), empty(), async (l) => lines.push(l), { ...opts, judge })
+  assert.deepEqual(sent, [['ana', 'dee']], 'not the creator, the promotion, or the comment that has nothing to do with phones')
+  assert.deepEqual(out.videos[0].matches, [{ handle: 'ana', text: rows[0].text, topics: ['digital habits'] }])
+  assert.equal(out.aiError, '')
+  assert.match(lines.join('\n'), /2 comments sent to Claude/)
+})
+
+test('Claude is not asked at all when no comment looks related', async () => {
+  let asked = 0
+  const rows = [{ handle: 'cy', text: 'what a lovely song, I really love this video' }]
+  const out = await findVideos(fakeBrowser({ cards: [card(1)], commentRows: { ok: true, rows } }), empty(), undefined, { ...opts, judge: async () => { asked++; return [] } })
+  assert.equal(asked, 0)
+  assert.deepEqual(out.videos[0].matches, [])
+})
+
+test('when Claude cannot be reached, the comment topics are used and Claude is not asked again', async () => {
+  const cards = [card(1), card(2)]
+  const rows = [{ handle: 'ana', text: 'my screen time is awful and brainrot is real' }, { handle: 'cy', text: 'what a lovely song, I really love this video' }]
+  let asked = 0
+  const judge = async () => { asked++; throw new Error('The Claude credit balance or spend limit has run out.') }
+  const lines = []
+  const out = await findVideos(fakeBrowser({ cards, commentRows: { ok: true, rows } }), empty(), async (l) => lines.push(l), { ...opts, judge })
+  assert.equal(asked, 1)
+  assert.equal(out.aiError, 'The Claude credit balance or spend limit has run out.')
+  assert.equal(out.videos.length, 2)
+  assert.ok(out.videos.every((v) => v.matches.length === 1 && v.matches[0].handle === 'ana'))
+  assert.match(lines.join('\n'), /Claude could not check the comments .* uses the comment topics instead/)
 })

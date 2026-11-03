@@ -1,5 +1,5 @@
-// A video's number: the part of its address that never changes, even if the creator renames their account.
-export const videoKey = (url: string) => /\/video\/(\d+)/.exec(url)?.[1] ?? url
+// A video's number (TikTok) or shortcode (Instagram): the part of its address that never changes, even if the creator renames their account.
+export const videoKey = (url: string) => /\/video\/(\d+)/.exec(url)?.[1] ?? /\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]{5,})/.exec(url)?.[1] ?? url
 
 const compact = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 })
 export const formatCount = (n: number) => compact.format(n)

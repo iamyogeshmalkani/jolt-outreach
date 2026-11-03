@@ -12,7 +12,7 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "test:extension": "node --test \"extension/test/*.test.mjs\"",
-    "test:reddit": "node --test \"reddit-extension/test/*.test.mjs\""
+    "test:instagram": "node --test \"instagram-extension/test/*.test.mjs\""
   },
   "dependencies": {
     "@fontsource-variable/hanken-grotesk": "^5.3.0",

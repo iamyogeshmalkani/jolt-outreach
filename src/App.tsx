@@ -1,22 +1,41 @@
 import { useCallback, useEffect, useState } from 'react'
 import { load, type Loaded } from './api'
+import type { Platform } from './types'
 import Videos from './Videos'
 
+const fromHash = (): Platform => (location.hash === '#instagram' ? 'instagram' : 'tiktok')
+
 export default function App() {
-  const [loaded, setLoaded] = useState<Loaded | null>(null)
+  const [platform, setPlatform] = useState<Platform>(fromHash)
+  const [loaded, setLoaded] = useState<Partial<Record<Platform, Loaded>>>({})
   const [error, setError] = useState('')
 
   useEffect(() => {
-    load().then(setLoaded, (e: Error) => setError(e.message))
+    const onHash = () => setPlatform(fromHash())
+    addEventListener('hashchange', onHash)
+    return () => removeEventListener('hashchange', onHash)
   }, [])
 
-  // Pick up new videos while the page is open (the finder adds them every time it runs).
-  const refresh = useCallback(() => load().then(setLoaded, () => {}), [])
+  // Each list is loaded the first time it is shown.
   useEffect(() => {
-    if (!loaded) return
+    if (loaded[platform]) return
+    setError('')
+    load(platform).then((l) => setLoaded((prev) => ({ ...prev, [platform]: l })), (e: Error) => setError(e.message))
+  }, [platform, loaded[platform] === undefined])
+
+  // Pick up new videos while the page is open (the finders add them every time they run).
+  const refresh = useCallback(() => load(platform).then((l) => setLoaded((prev) => ({ ...prev, [platform]: l })), () => {}), [platform])
+  const here = loaded[platform]
+  useEffect(() => {
+    if (!here) return
     const t = setInterval(refresh, 300_000)
     return () => clearInterval(t)
-  }, [loaded !== null, refresh])
+  }, [here !== undefined, refresh])
+
+  const choose = (p: Platform) => {
+    location.hash = p === 'instagram' ? '#instagram' : ''
+    setPlatform(p)
+  }
 
   if (error) {
     return (
@@ -26,6 +45,6 @@ export default function App() {
       </main>
     )
   }
-  if (!loaded) return <main className="splash" aria-busy="true"><p>Loading videos</p></main>
-  return <Videos loaded={loaded} onRefresh={refresh} />
+  if (!here) return <main className="splash" aria-busy="true"><p>Loading videos</p></main>
+  return <Videos key={platform} platform={platform} onPlatform={choose} loaded={here} onRefresh={refresh} />
 }

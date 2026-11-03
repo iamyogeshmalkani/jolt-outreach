@@ -1,6 +1,6 @@
 """A mock TikTok search page built from the structure of a real one (data-e2e names taken from a real page):
 results are search_video-item cards, and clicking one opens the video over the results with browse-* elements
-and the video's like and comment counts."""
+and the video's like and comment counts, with a scrollable list of comment-level-1 comments."""
 
 CAPTIONS = {
     1: "Why I can't stop doomscrolling #dopamine detox",
@@ -35,8 +35,18 @@ def search_html(captions=CAPTIONS, comment_count="40", open_delay_ms=600):
       m.innerHTML = `<button data-e2e="browse-close"></button>
         ${{caption(a) ? '<div data-e2e="browse-video-desc">' + caption(a) + '</div>' : ''}}
         <strong data-e2e="browse-like-count">9K</strong><strong data-e2e="browse-comment-count">{comment_count}</strong>
-`
+        <div id="panel" style="height:200px;overflow:auto"></div>`
       document.body.appendChild(m)
+      const panel = m.querySelector('#panel')
+      let n = 0
+      const add = (k) => {{ for (let i = 0; i < k; i++, n++) {{ const r = document.createElement('div')
+        const text = n % 2 ? 'what a nice song, love the editing ' + n : 'My screen time is 9 hours a day and the brain rot is real ' + n
+        r.innerHTML = `<a data-e2e="comment-avatar-1" href="/@fan${{n}}?lang=en"></a><span data-e2e="comment-username-1">Fan ${{n}}</span>
+          <p data-e2e="comment-level-1">${{text}}</p>
+          <p data-e2e="comment-level-2">a reply about phone addiction that must be ignored</p>`
+        panel.appendChild(r) }} }}
+      add(5)
+      panel.addEventListener('scroll', () => {{ if (panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 5 && n < 80) add(8) }})
       m.querySelector('[data-e2e="browse-close"]').addEventListener('click', () => m.remove())
     }}, {open_delay_ms})
   }})

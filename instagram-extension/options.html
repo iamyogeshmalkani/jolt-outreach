@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Jolt Instagram finder settings</title>
+    <link rel="stylesheet" href="ui.css" />
+  </head>
+  <body class="options">
+    <h1><i class="mark"></i>Jolt Instagram finder settings</h1>
+
+    <section>
+      <h2>Where results go</h2>
+      <label>GitHub repo
+        <input id="repo" placeholder="owner/name" autocomplete="off" />
+      </label>
+      <label>GitHub token
+        <input id="token" type="password" autocomplete="off" placeholder="github_pat_…" />
+      </label>
+      <p class="hint">
+        The same token as the TikTok finder works. Or make one at <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">GitHub, Fine-grained tokens</a>:
+        pick <b>Only select repositories</b> and choose this repo, then under <b>Repository permissions</b> set
+        <b>Contents</b> to <b>Read and write</b>. It stays in this Chrome and is only ever sent to GitHub.
+      </p>
+    </section>
+
+    <section>
+      <h2>Keywords to search for</h2>
+      <p class="hint">Each run searches Instagram for these and keeps the recent, popular reels. One entry per line. If Instagram's search shows nothing for a keyword, its hashtag is tried (phone addiction becomes #phoneaddiction).</p>
+      <label>Keywords <span class="hint">(searched as typed, e.g. phone addiction)</span>
+        <textarea id="keywords" rows="10" autocomplete="off"></textarea>
+      </label>
+    </section>
+
+    <section>
+      <h2>Claude checks the comments</h2>
+      <p class="hint">
+        With a Claude API key, Claude reads each comment on a qualifying reel and keeps the ones where the writer is talking about their own screen time, doomscrolling,
+        brain rot, phone addiction or other digital habits that affect them. Without a key, or if Claude can't be reached, the list below is used instead.
+        The key stays in this Chrome and is only ever sent to Anthropic.
+      </p>
+      <label>Claude API key
+        <input id="aiKey" type="password" autocomplete="off" placeholder="sk-ant-…" />
+      </label>
+      <label>Model <span class="hint">(leave empty for the default, claude-haiku-5-5)</span>
+        <input id="aiModel" autocomplete="off" />
+      </label>
+      <div class="row">
+        <button id="testAi" type="button">Test Claude</button>
+        <span id="aiMsg" role="status"></span>
+      </div>
+    </section>
+
+    <section>
+      <h2>Comments to keep</h2>
+      <p class="hint">
+        For each reel that qualifies, the top 50 comments are read. If Claude is not used, the ones that mention any of these are saved with it. One entry per line.
+        Spacing and hyphens don't matter ("brain rot" also finds "brainrot"), and an entry can be the start of a word
+        ("procrastinat" finds procrastinating). Comments that look like they come from a minor, touch on self-harm, are adult, or are promotions are never saved.
+      </p>
+      <label>Comment topics
+        <textarea id="commentTopics" rows="10" autocomplete="off"></textarea>
+      </label>
+    </section>
+
+    <section>
+      <h2>What counts as a good reel</h2>
+      <label>Posted within the last (days)
+        <input id="maxAgeDays" type="number" min="1" max="365" />
+      </label>
+      <label>At least this many likes <span class="hint">(popular ones; a reel whose likes are hidden is kept)</span>
+        <input id="minLikes" type="number" min="0" step="100" />
+      </label>
+      <label>Reels to check per run <span class="hint">(a run takes about 10 seconds per reel; keep it modest, Instagram limits accounts that do too much)</span>
+        <input id="videosPerRun" type="number" min="1" max="100" />
+      </label>
+      <p class="hint">Instagram's search does not show likes, so each reel is opened to read them. The posting date is read from the reel's address, so old reels are skipped without opening.</p>
+    </section>
+
+    <section>
+      <h2>Automatic runs</h2>
+      <p class="hint">Only used when "Also run by itself every hour" is ticked in the popup.</p>
+      <div class="row">
+        <label>From hour <input id="startHour" type="number" min="0" max="23" /></label>
+        <label>Until hour <input id="endHour" type="number" min="1" max="24" /></label>
+      </div>
+    </section>
+
+    <div class="row">
+      <button id="save" class="primary">Save and check</button>
+      <span id="msg" role="status"></span>
+    </div>
+    <script type="module" src="options.js"></script>
+  </body>
+</html>

@@ -2,25 +2,27 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import * as r from '../lib/rules.js'
 
-test('searches: one per competitor and one per keyword; names are cleaned up', () => {
-  const q = r.buildQueries({ screenTime: ['Opal', 'opal', ' one  sec '], learn: ['Headway'], play: [] }, ['phone addiction', 'Phone Addiction', ' digital detox '])
-  assert.deepEqual(q, ['Opal app review', 'one sec app review', 'Headway app review', 'phone addiction', 'digital detox'])
-  assert.deepEqual(r.parseNames('Opal, one sec\n\n  Brick ;opal'), ['Opal', 'one sec', 'Brick'])
-  assert.ok(r.QUERIES.includes('Matiks app review') && r.QUERIES.includes('Apple Screen Time app review') && r.QUERIES.includes('phone addiction'))
-  assert.deepEqual(r.buildQueries({}, []), [], 'empty lists give no searches')
+test('searches: one per topic; names are cleaned up and repeats dropped', () => {
+  const q = r.buildQueries(['digital detox', 'Digital Detox', ' study  tips ', 'nervous system'])
+  assert.deepEqual(q, ['digital detox', 'study tips', 'nervous system'])
+  assert.deepEqual(r.parseNames('digital detox, study tips\n\n  nervous system ;DIGITAL detox'), ['digital detox', 'study tips', 'nervous system'])
+  assert.deepEqual(r.buildQueries([]), [], 'an empty list gives no searches')
 })
 
-test('every run searches both a competitor and a keyword, and falls back to whichever list is left', () => {
-  const comp = { screenTime: ['Opal', 'Brick', 'Forest'], learn: [], play: [] }
-  for (let seed = 0; seed < 30; seed++) {
-    const [a, b] = r.pickRunQueries(comp, ['phone addiction', 'digital detox'], 2, seed)
-    assert.match(a, / app review$/)
-    assert.ok(['phone addiction', 'digital detox'].includes(b))
-  }
-  assert.equal(r.pickRunQueries(comp, [], 2, 1).length, 2)
-  assert.ok(r.pickRunQueries(comp, [], 2, 1).every((x) => / app review$/.test(x)))
-  assert.deepEqual(r.pickRunQueries({}, ['only one'], 2, 1), ['only one'])
-  assert.deepEqual(r.pickRunQueries({}, [], 2, 1), [])
+test('the default topics are the ones asked for, with no competitor apps or games', () => {
+  const asked = ['microlearning app', 'learn while scrolling', 'digital wellbeing', 'digital wellness', 'nervous system', 'digital detox', 'studytalk']
+  for (const topic of asked) assert.ok(r.QUERIES.includes(topic), topic)
+  assert.ok(r.QUERIES.length > asked.length, 'with more of the same kind added')
+  assert.ok(!r.QUERIES.some((q) => /doomscroll|app review|matiks|brilliant|opal/i.test(q)))
+})
+
+test('every run picks some of the topics, a different handful each hour, and all of them when asked for enough', () => {
+  const topics = ['a', 'b', 'c', 'd', 'e', 'f']
+  assert.deepEqual(r.pickRunQueries(topics, 3, 5), r.pickRunQueries(topics, 3, 5))
+  assert.equal(r.pickRunQueries(topics, 3, 5).length, 3)
+  assert.ok(new Set(Array.from({ length: 20 }, (_, i) => r.pickRunQueries(topics, 3, i).join())).size > 3)
+  assert.deepEqual([...r.pickRunQueries(topics, 50, 1)].sort(), topics)
+  assert.deepEqual(r.pickRunQueries([], 3, 1), [])
 })
 
 test('comment counts: plain numbers, thousands separators and K or M', () => {
@@ -50,4 +52,46 @@ test('a video\'s posting time comes from its id', () => {
 test('a video is known by its number, whatever the account is called', () => {
   assert.equal(r.videoKey('https://www.tiktok.com/@old/video/7699206417533701397'), '7699206417533701397')
   assert.equal(r.videoKey('https://www.tiktok.com/@new/video/7699206417533701397?x=1'), '7699206417533701397')
+})
+
+test('comments about the topics are kept, matched loosely, and the rest are not', () => {
+  const row = (text, handle = 'someone') => ({ handle, text })
+  const pick = (texts, topics) => r.pickComments(texts.map((t) => (typeof t === 'string' ? row(t) : t)), 'maker', topics).map((c) => c.text)
+  const topics = ['screen time', 'brain rot', 'phone addict', 'procrastinat', 'digital detox']
+  assert.deepEqual(pick([
+    'my screen time is insane lately', 'My ScreenTime says 9 hours', 'this is such brainrot honestly', 'brain-rot content everywhere',
+    'i have a real phone addiction', 'procrastinating again instead of working', 'doing a digital detox this month',
+    'what a lovely song, I love it', 'unscreen timed', 'cannot believe how good this is',
+  ], topics), [
+    'my screen time is insane lately', 'My ScreenTime says 9 hours', 'this is such brainrot honestly', 'brain-rot content everywhere',
+    'i have a real phone addiction', 'procrastinating again instead of working', 'doing a digital detox this month',
+  ])
+  assert.deepEqual(r.pickComments([row('screen time is high for me')], 'maker', topics)[0].topics, ['screen time'])
+  assert.deepEqual(r.pickComments([row('brain rot and screen time')], 'maker', topics)[0].topics, ['screen time', 'brain rot'])
+})
+
+test('comments are not kept when they are the creator, too short or long, repeated, or unsafe', () => {
+  const t = ['screen time']
+  const keep = (rows) => r.pickComments(rows, 'Maker', t).length
+  assert.equal(keep([{ handle: 'maker', text: 'my screen time is high' }]), 0, 'the creator, ignoring case')
+  assert.equal(keep([{ handle: 'a', text: 'screen time' }]), 0, 'too short')
+  assert.equal(keep([{ handle: 'a', text: 'screen time ' + 'x'.repeat(400) }]), 0, 'too long')
+  assert.equal(keep([{ handle: 'a', text: 'my screen time is high' }, { handle: 'a', text: 'My screen time is  high' }]), 1, 'same person, same words')
+  assert.equal(keep([{ handle: 'a', text: 'my screen time is high' }, { handle: 'b', text: 'my screen time is high' }]), 2, 'different people')
+  assert.equal(keep([{ handle: 'a', text: 'my mom says my screen time is high' }]), 0, 'looks like a minor')
+  assert.equal(keep([{ handle: 'a', text: 'my screen time is high and I want to kill myself' }]), 0, 'self-harm')
+  assert.equal(keep([{ handle: 'a', text: 'screen time tips at www.example.com' }]), 0, 'a promotion')
+  assert.equal(keep([{ handle: 'official_deals', text: 'my screen time is high' }]), 0, 'a brand account')
+  assert.equal(keep([{ handle: '', text: 'my screen time is high' }]), 0, 'no writer')
+  assert.equal(r.pickComments([{ handle: 'a', text: 'anything goes about my day' }], 'm', []).length, 0, 'no topics keeps nothing')
+})
+
+test('the default comment topics cover the subjects asked for', () => {
+  const t = r.DEFAULT_COMMENT_TOPICS.join(' ')
+  for (const word of ['screen time', 'brain rot', 'productiv', 'digital detox', 'phone addict', 'digital habit', 'focus']) assert.ok(t.includes(word), word)
+  const hit = (text) => r.pickComments([{ handle: 'a', text }], 'm').length === 1
+  assert.ok(hit('i get so little done, my productivity is gone'))
+  assert.ok(hit('high screen time again this week'))
+  assert.ok(hit('i need a digital detox'))
+  assert.ok(!hit('this recipe looks really tasty, thanks for sharing'))
 })

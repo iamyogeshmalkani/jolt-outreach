@@ -4,7 +4,7 @@
 // The selectors below come from a real TikTok search page with a video opened over it:
 //   search results   search_video-item (thumbnail), search-card-desc (caption), search-card-user-unique-id
 //   opened video     browse-video-desc, browse-like-count, browse-comment-count, browse-close
-//   comments         comment-level-1 (the text), comment-avatar-1 (link to /@handle); replies are level-2
+//   comments         comment-level-1 (the text), with the writer's /@handle link beside it; replies are level-2
 
 export function readGuard() {
   const body = (document.body ? document.body.innerText : '').slice(0, 4000)
@@ -106,4 +106,32 @@ export async function closeVideo() {
     for (let i = 0; i < 8 && !gone(); i++) await sleep(500)
   }
   return gone()
+}
+
+// Reads the first `max` comments of the opened video (TikTok lists the top ones first), scrolling just enough to load them.
+export async function readCommentsPage(max = 50) {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+  const items = () => document.querySelectorAll('[data-e2e="comment-level-1"]')
+  for (let i = 0; i < 6 && !items().length; i++) {
+    const tab = [...document.querySelectorAll('*')].find(
+      (e) => e.childElementCount === 0 && /^Comments( \(\d+\))?$/.test((e.textContent || '').trim()),
+    )
+    if (tab) tab.click()
+    await sleep(1500)
+  }
+  if (!items().length) return { ok: false, rows: [] }
+  const panel = [...document.querySelectorAll('div')]
+    .filter((d) => d.scrollHeight > d.clientHeight + 50 && d.querySelector('[data-e2e="comment-level-1"]'))
+    .pop()
+  for (let i = 0; i < 12 && items().length < max; i++) {
+    if (panel) panel.scrollTop = panel.scrollHeight
+    await sleep(1100)
+  }
+  const rows = [...items()].slice(0, max).map((el) => {
+    let c = el
+    for (let i = 0; i < 5 && c && !c.querySelector('a[href^="/@"]'); i++) c = c.parentElement
+    const a = c && c.querySelector('a[href^="/@"]')
+    return { handle: a ? a.getAttribute('href').split('?')[0].slice(2) : '', text: el.innerText.replace(/\s+/g, ' ') }
+  })
+  return { ok: true, rows }
 }

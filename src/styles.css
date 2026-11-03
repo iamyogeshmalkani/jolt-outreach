@@ -72,6 +72,15 @@ code { font-size: 0.9em; background: rgb(27 36 48 / 0.08); padding: 1px 5px; bor
 .v-caption { margin: 0; font: 500 17px/1.4 var(--serif); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .v-facts { margin: 8px 0 0; display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 14px; color: var(--mute); }
 .v-facts b { color: var(--ink); font-weight: 600; }
+.v-comments { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 4px; }
+.v-comments ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 10px; }
+.v-comments li { background: var(--ground); border-radius: 10px; padding: 10px 12px; }
+.v-comments li b { font-weight: 600; font-size: 14px; }
+.v-comments .c-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 8px; }
+.v-comments .c-actions a.secondary { text-decoration: none; padding: 5px 12px; font-size: 13px; }
+.v-comments .c-actions button { padding: 5px 10px; font-size: 13px; }
+.v-comments li p { margin: 4px 0 0; font-size: 15px; line-height: 1.45; overflow-wrap: anywhere; }
+.v-comments .topics { display: block; margin-top: 4px; font-size: 12px; color: var(--mute); }
 .v-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 14px; }
 .v-actions a.primary { text-decoration: none; padding: 8px 16px; }
 .v-actions .secondary { padding: 8px 14px; }

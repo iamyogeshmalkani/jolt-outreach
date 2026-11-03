@@ -1,7 +1,8 @@
 # Jolt outreach
 
-Find recent, popular TikTok videos on your topics and list their links in a simple page. You open each
-video and look through its comments yourself, then mark it complete so it is never found again.
+Find recent, popular TikTok videos and Instagram reels on your topics. For TikTok it also finds the comments
+that are about screen time, brain rot, phone addiction, productivity and similar subjects. A simple page lists
+each video (with those comments under it), and you open it, then mark it complete so it is never found again.
 
 **Live page:** https://iamyogeshmalkani.github.io/jolt-outreach/
 
@@ -9,13 +10,39 @@ It has two parts, and nothing to run in a terminal:
 
 - **The Jolt finder** is a Chrome extension. It runs in your own Chrome, where you are already
   logged into TikTok, and only reads pages: it searches TikTok for the topics you list in Settings,
-  opens the most-viewed recent results to check their comment count, and saves the ones that qualify to
-  the `data` branch of this repo. It does not read comments and uses no AI.
-- **The page** is hosted on GitHub. It reads the `data` branch and lists the videos, each with an
-  **Open video** link, **Copy link** and **Mark complete**.
+  opens the most-viewed recent results to check their comment count, reads the top 50 comments of each
+  video that qualifies, and saves the video and the comments about your topics to the `data` branch of
+  this repo. A comment is kept when Claude says the writer is talking about their own screen time or digital
+  habits (see **Claude checks the comments** below), or, with no Claude key, when it mentions a word or phrase in
+  the **Comment topics** list.
+- **The page** is hosted on GitHub. It reads the `data` branch and lists the videos, each with the
+  comments that matched (the writer's @name links to their TikTok profile), an **Open video** link,
+  **Copy link** and **Mark complete**.
 
 A video is listed when it was posted in the last 60 days, has at least 10,000 views and at least 20
-comments. All three numbers, and the topics, are in the extension's **Settings**.
+comments. All three numbers, the search topics and the comment topics are in the extension's **Settings**.
+A video is listed even when none of its comments match, and says so.
+
+**Claude checks the comments (optional, both extensions).** In the extension's Settings, paste a Claude API key
+(`sk-ant-...`) and choose **Test Claude**. The key stays in that Chrome and is only ever sent to Anthropic; it is
+never saved to the repo or the page, so don't paste it anywhere public. Claude keeps comments where the writer
+talks about their own high screen time, doomscrolling, brain rot, phone or social media addiction, lost focus or
+productivity, or trying to cut back, and drops reactions to the video, chatter, promotion and crisis topics.
+If Claude can't be reached (wrong key, no credit), the run goes on with the Comment topics list and says so.
+It is built to use few tokens:
+- Comments are cleaned locally first (the creator's own, too short or long, repeats, minors, promotions).
+- Only comments that mention a phone or screen word are sent at all; reactions and chatter cost nothing.
+- Each comment goes as one short numbered line (cut at 220 characters) with a short instruction, up to 40 per
+  request, and Claude answers with just the numbers to keep. Roughly 25 tokens in per comment and a handful out.
+- Only reels and videos that already qualify are read, and the default model is the small, cheap
+  `claude-haiku-5-5` (changeable in Settings).
+
+**Comment topics.** The default list covers screen time, high screen time, brain rot, doomscrolling,
+phone and social media addiction, digital detox, dopamine, digital and phone habits, productivity,
+procrastination, focus and distraction. Each entry is a word or phrase. Case, spacing and hyphens don't
+matter ("brain rot" also finds "brainrot"), and an entry can be the start of a word ("procrastinat"
+finds procrastinating). Comments from the video's own creator, very short or very long ones, repeats,
+and any that look like they come from a minor, mention self-harm, are adult, or are promotions are never saved.
 
 ## Set up the extension (once, about 3 minutes)
 
@@ -47,78 +74,44 @@ The token stays in your Chrome and is only ever sent to GitHub. It can only touc
 - Run the extension in **one** Chrome. It merges with what is already published, so a second one
   would not lose data, but the two would not know about each other's recent finds.
 
-## The Reddit extension
+## The Instagram extension
 
-A second, separate extension for Reddit. For each subreddit you list, it finds the top posts, picks the
-top commenter on each, and drafts two things with an AI model: a message to that commenter, and a reply you
-could post on the post. You send and post everything yourself.
+A second, separate extension that does the same job on Instagram: it searches your keywords, keeps recent,
+popular reels, and lists their links on the same page, under its **Instagram** button. Like the TikTok one, it
+reads the top 50 comments of each kept reel and saves the ones about the writer's own digital habits (checked by
+Claude if you add a key, otherwise by the Comment topics list in its Settings).
 
-1. Download https://iamyogeshmalkani.github.io/jolt-outreach/jolt-reddit-extension.zip, unzip it and load
+1. Download https://iamyogeshmalkani.github.io/jolt-outreach/jolt-instagram-extension.zip, unzip it and load
    it on `chrome://extensions` (Developer mode, Load unpacked), the same way as the TikTok one.
-2. Log into Reddit in that Chrome.
-3. Open its **Settings**. Add your subreddits, choose how many posts, pick the AI provider and paste its
-   key: **Groq** (key from console.groq.com/keys, starts with `gsk_`, default model `openai/gpt-oss-20b`) or
-   **Grok (xAI)** (key from console.x.ai, starts with `xai-`). They are different companies and a key from
-   one does not work with the other. Settings says so if you mix them up. Use **Test Reddit** and **Test AI** to check both.
-4. Click the extension, choose **Find top posts**, then **Open dashboard**.
+2. **Log into Instagram** in that same Chrome. Use a spare account if you can.
+3. Open its **Settings**, paste the same GitHub token as the TikTok extension (it saves to the same repo, in
+   its own files, `instagram_found.json` and `instagram_done.json`), and choose **Save and check**.
+4. Click the extension and choose **Find reels now**.
 
-In the dashboard, each post shows its top commenter and their comment, a message ready to send (the
-button opens Reddit's message form already filled in), and a reply draft. Everything stays in this Chrome.
-Nothing is uploaded to GitHub.
+A reel is listed when it is a video, was posted in the last 60 days, and has at least 1,000 likes (or the
+creator hides likes). Keywords, days, likes and reels per run are in **Settings**.
 
-### Using it on more than one device
-
-By default everything stays in one Chrome. To share it across devices (and teammates), the extension can
-keep your posts, statuses, edits and settings in a **private** GitHub repo:
-
-1. The sync repo is `jolt-reddit-data`, and it must stay **private**: it holds other people's usernames and what
-   they wrote. The extension refuses a public repo.
-2. Make a token at https://github.com/settings/personal-access-tokens/new: **Only select repositories**, pick
-   that repo, and set **Contents** to **Read and write**. (This is a different token from the TikTok
-   extension's, which is limited to a different repo.)
-3. On each device, open **Settings**, paste the token under **Sync token**, then choose **Test sync**. The repo
-   name is already filled in. A token cannot say which repo it is for, so it stays a visible setting. Change
-   it only to sync through a different private repo. Teammates need access to the repo and their own token.
-
-After that it syncs by itself: before and after each run, a moment after you change anything in the
-dashboard, when you come back to the dashboard tab, and with **Sync now**.
-
-- **Changes are merged, not overwritten.** If one device marks the message as sent while another marks the
-  reply as posted, both changes survive. If two devices change the same part, the newest change wins.
-- **Posts found on one device are not found again on another**, because each run syncs first.
-- **Keys never sync.** Your AI key and sync token stay on each device. Settings such as subreddits and the
-  message template do sync, and the most recently saved version wins.
-- **It keeps the newest 250 posts.** Older ones drop off, on every device.
-
-- **People who react to what the post is about.** Besides the top commenter, it looks for other commenters
-  who praise, criticise, review or recommend what the post is about, give a tip, or share their own take or
-  experience (default 2 per post, 0 turns it off in Settings). If the post is about a product or an idea, a
-  comment only counts if it is about that same thing: it has to share real words with the post, and if an AI
-  key is set, the AI checks each comment against the post's subject and drops questions, jokes, off-topic
-  opinions and simple agreement. Without a key it goes by how people write and the shared words. Each person
-  gets their own message (worded for a suggestion or for an opinion), edit box and status. A post stays in
-  **To do** until every person on it and the reply are dealt with.
-- **Nothing is offered twice.** Every post that was kept and every person who was offered is remembered, and
-  never offered again, across runs, across devices (it syncs), and even after old posts drop off the list.
-  Skipping someone counts, and so does anyone on your skip list in Settings. Settings shows how many posts
-  and people are remembered. A run says how many already-seen posts it skipped, and says so when everything
-  at the top of a subreddit has been seen: try a longer period or more subreddits.
-- **The top commenter** is the highest-scoring top-level comment from a real person. It skips the poster,
-  moderators, bots, deleted comments, links, anyone who looks under 18, and sensitive topics. Posts that
-  are pinned, adult, locked or about sensitive subjects are skipped too.
-- **Check the rules first.** If a subreddit's rules mention promotion, surveys, research or DMs, the post
-  shows a warning. Read the rules and ask the moderators before you message or reply. Many communities
-  ban unsolicited messages, and Reddit users react badly to them.
-- **Replies are drafts.** Edit each one so it sounds like you. Don't post the same text twice.
-- **Reddit may block it.** Reddit refuses many automated requests. This reads public pages in your own
-  logged-in Chrome, and if Reddit blocks it, the popup says so. Open reddit.com once in that Chrome and try again.
-- **Run it sparingly.** A run makes a few dozen requests. Once or twice a day is plenty.
+- **How it searches.** For each keyword it opens Instagram's search for it and reads the reel links; if the
+  search shows nothing it tries the keyword as a hashtag (phone addiction becomes #phoneaddiction).
+- **Age** comes from the reel's shortcode, which encodes when it was posted, so old reels are skipped without
+  opening them. If a shortcode can't be read, the reel is not filtered out by age.
+- **Likes** are not shown in search results, so each candidate reel is opened and read. Instagram does not show
+  a reel's views to other people, so likes are the popularity measure.
+- **Go gently.** Instagram limits accounts that act like a bot much faster than TikTok does. A run is capped at
+  40 reels by default, with pauses of several seconds, and takes about 10 seconds per reel. Start one by hand a
+  couple of times a day at most. If Instagram asks for a check or logs you out, the run stops and says so.
+- **Mark complete** on the page works the same way as for TikTok, saved to `instagram_done.json`.
+- **Reaching out.** Under each reel or video the page lists the saved comments with the writer's @name, the
+  comment, why it matched, **Open profile** (their TikTok or Instagram profile) and **Copy profile link**.
+- **Instagram changes its pages.** The readers in `instagram-extension/lib/pages.js` use Instagram's search links
+  and a post's summary tags. They were tested against mock pages, not the live site, so the first real run may
+  need small fixes: the popup's log shows what the page had when a reel would not open.
 
 ## What gets published
 
-The live page and the `data` branch are public. The `data` branch holds only public TikTok video links
-with their caption, creator name and counts (the newest 500 videos), plus the list of videos marked
-complete. The page asks search engines not to index it.
+The live page and the `data` branch are public. The `data` branch holds public TikTok video and Instagram reel links
+with their caption, creator name and counts, the public comments that matched (the writer's @name and
+the comment text) for the newest 500 videos, plus the list of videos marked complete. The page asks search engines not to index it.
 
 The rules are in `extension/lib/rules.js` and the run logic in `extension/lib/tasks.js`.
 
@@ -134,16 +127,19 @@ The rules are in `extension/lib/rules.js` and the run logic in `extension/lib/ta
 ## Tests
 
     npm run test:extension                          # rules, GitHub saving and run logic
+    npm run test:instagram                          # the same for the Instagram extension
     .venv/bin/python extension/test/pages_test.py   # page readers against mock TikTok pages
     .venv/bin/python extension/test/extension_e2e.py  # loads the extension in Chromium, mocks TikTok and GitHub (~2 min)
+    .venv/bin/python instagram-extension/test/pages_test.py       # the same two for Instagram
+    .venv/bin/python instagram-extension/test/extension_e2e.py
 
 The end-to-end test needs `.venv/bin/python -m playwright install chromium` once. None of the tests
 touch real TikTok.
 
 ## Layout
 
-- `reddit-extension/` the Reddit extension (its tests: `npm run test:reddit`, and `test/e2e.py`)
+- `instagram-extension/` the Instagram extension (same layout as `extension/`)
 - `extension/` the Chrome extension (`lib/rules.js` searches and limits, `lib/tasks.js` what a run does,
-  `lib/pages.js` what is read from TikTok pages, `lib/github.js` saving)
+  `lib/pages.js` what is read from TikTok pages (search results, video counts, comments), `lib/github.js` saving)
 - `src/` the page, `.github/workflows/pages.yml` publishes it and the extension download
 - `jolt_outreach.py`, `scripts/py.mjs`, `server/` the older Python finder for people, no longer used by the page

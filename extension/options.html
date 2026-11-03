@@ -26,18 +26,39 @@
     <section>
       <h2>Topics to search for</h2>
       <p class="hint">Each run searches TikTok for these topics and keeps the recent, popular videos. One entry per line.</p>
-      <label>Keywords <span class="hint">(searched as typed, e.g. phone addiction)</span>
-        <textarea id="keywords" rows="8" autocomplete="off"></textarea>
+      <label>Topics <span class="hint">(each one is searched as typed, e.g. digital detox)</span>
+        <textarea id="keywords" rows="14" autocomplete="off"></textarea>
       </label>
-      <p class="hint">Competitors are searched as "name app review".</p>
-      <label>Screen-time apps
-        <textarea id="comp-screenTime" rows="6" autocomplete="off"></textarea>
+    </section>
+
+    <section>
+      <h2>Claude checks the comments</h2>
+      <p class="hint">
+        With a Claude API key, Claude reads each comment and keeps the ones where the writer is talking about their own screen time, doomscrolling,
+        brain rot, phone addiction or other digital habits that affect them. Without a key, or if Claude can't be reached, the list below is used instead.
+        The key stays in this Chrome and is only ever sent to Anthropic.
+      </p>
+      <label>Claude API key
+        <input id="aiKey" type="password" autocomplete="off" placeholder="sk-ant-…" />
       </label>
-      <label>Learn apps
-        <textarea id="comp-learn" rows="5" autocomplete="off"></textarea>
+      <label>Model <span class="hint">(leave empty for the default, claude-haiku-5-5)</span>
+        <input id="aiModel" autocomplete="off" />
       </label>
-      <label>Play apps
-        <textarea id="comp-play" rows="3" autocomplete="off"></textarea>
+      <div class="row">
+        <button id="testAi" type="button">Test Claude</button>
+        <span id="aiMsg" role="status"></span>
+      </div>
+    </section>
+
+    <section>
+      <h2>Comments to keep</h2>
+      <p class="hint">
+        For each video that qualifies, the top 50 comments are read. If Claude is not used, the ones that mention any of these are saved with it. One entry per line.
+        Spacing and hyphens don't matter ("brain rot" also finds "brainrot"), and an entry can be the start of a word
+        ("procrastinat" finds procrastinating). Comments that look like they come from a minor, touch on self-harm, are adult, or are promotions are never saved.
+      </p>
+      <label>Comment topics
+        <textarea id="commentTopics" rows="10" autocomplete="off"></textarea>
       </label>
     </section>
 

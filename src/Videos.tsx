@@ -2,11 +2,21 @@ import { useMemo, useState } from 'react'
 import { getToken, setDone, setToken, type Loaded } from './api'
 import { ageText, formatCount, videoKey } from './helpers'
 import Settings from './Settings'
-import type { Video } from './types'
+import type { Platform, Video } from './types'
 
 const REPO: string = import.meta.env.VITE_REPO ?? 'iamyogeshmalkani/jolt-outreach'
 
-export default function Videos({ loaded, onRefresh }: { loaded: Loaded; onRefresh: () => Promise<void> }) {
+const NAMES: Record<Platform, string> = { tiktok: 'TikTok', instagram: 'Instagram' }
+// Where to write to the person who left a comment.
+const profileUrl = (platform: Platform, handle: string) =>
+  platform === 'instagram' ? `https://www.instagram.com/${encodeURIComponent(handle)}/` : `https://www.tiktok.com/@${encodeURIComponent(handle)}`
+
+export default function Videos({ platform, onPlatform, loaded, onRefresh }: {
+  platform: Platform
+  onPlatform: (p: Platform) => void
+  loaded: Loaded
+  onRefresh: () => Promise<void>
+}) {
   const [tab, setTab] = useState<'todo' | 'done'>('todo')
   const [done, setDoneKeys] = useState(() => new Set(loaded.done.map((d) => videoKey(d.url))))
   const [token, setTokenState] = useState(getToken)
@@ -20,7 +30,7 @@ export default function Videos({ loaded, onRefresh }: { loaded: Loaded; onRefres
 
   const latest = useMemo(() => loaded.videos.reduce((max, v) => (v.found > max ? v.found : max), ''), [loaded.videos])
   const sorted = useMemo(
-    () => [...loaded.videos].sort((a, b) => b.found.localeCompare(a.found) || (b.views ?? 0) - (a.views ?? 0)),
+    () => [...loaded.videos].sort((a, b) => b.found.localeCompare(a.found) || (b.views ?? b.likes ?? 0) - (a.views ?? a.likes ?? 0)),
     [loaded.videos],
   )
   const todo = sorted.filter((v) => !doneKeys.has(videoKey(v.url)))
@@ -32,7 +42,7 @@ export default function Videos({ loaded, onRefresh }: { loaded: Loaded; onRefres
     setBusy(key)
     setNote('')
     try {
-      const where = await setDone(v.url, on)
+      const where = await setDone(platform, v.url, on)
       setDoneKeys((prev) => {
         const next = new Set(prev)
         if (on) next.add(key)
@@ -54,11 +64,11 @@ export default function Videos({ loaded, onRefresh }: { loaded: Loaded; onRefres
     }
   }
 
-  async function copy(v: Video) {
+  async function copy(url: string) {
     try {
-      await navigator.clipboard.writeText(v.url)
-      setCopied(v.url)
-      setTimeout(() => setCopied((c) => (c === v.url ? '' : c)), 1500)
+      await navigator.clipboard.writeText(url)
+      setCopied(url)
+      setTimeout(() => setCopied((c) => (c === url ? '' : c)), 1500)
     } catch {
       setNote('Could not copy. Open the video and copy the address from there.')
     }
@@ -68,6 +78,11 @@ export default function Videos({ loaded, onRefresh }: { loaded: Loaded; onRefres
     <div className="app">
       <header className="bar">
         <h1><i className="mark" aria-hidden="true" />Jolt videos</h1>
+        <div className="chips" role="group" aria-label="Platform">
+          {(Object.keys(NAMES) as Platform[]).map((p) => (
+            <button key={p} aria-pressed={platform === p} onClick={() => onPlatform(p)}>{NAMES[p]}</button>
+          ))}
+        </div>
         <div className="chips" role="group" aria-label="Show">
           <button aria-pressed={tab === 'todo'} onClick={() => setTab('todo')}>To do <b>{todo.length}</b></button>
           <button aria-pressed={tab === 'done'} onClick={() => setTab('done')}>Complete <b>{finished.length}</b></button>
@@ -89,7 +104,7 @@ export default function Videos({ loaded, onRefresh }: { loaded: Loaded; onRefres
         {shown.length === 0 && (
           <p className="empty">
             {loaded.videos.length === 0
-              ? 'No videos yet. Run the Jolt finder extension in Chrome and they will appear here.'
+              ? `No videos yet. Run the Jolt ${NAMES[platform]} finder extension in Chrome and they will appear here.`
               : tab === 'todo'
                 ? 'Nothing left to do. New videos show up after the next finder run.'
                 : 'No video is marked complete yet.'}
@@ -106,15 +121,42 @@ export default function Videos({ loaded, onRefresh }: { loaded: Loaded; onRefres
                   {v.caption || 'No caption'}
                 </p>
                 <p className="v-facts">
-                  <b>@{v.creator}</b>
-                  {v.views !== null && <span>{formatCount(v.views)} views</span>}
-                  <span>{formatCount(v.comments)} comments</span>
+                  {v.creator && <b>@{v.creator}</b>}
+                  {v.views != null && <span>{formatCount(v.views)} views</span>}
+                  {platform === 'instagram' && <span>{v.likes != null ? `${formatCount(v.likes)} likes` : 'likes hidden'}</span>}
+                  {v.comments != null && <span>{formatCount(v.comments)} comments</span>}
                   {age && <span>{age}</span>}
                   <span>found for “{v.topic}”</span>
                 </p>
+                {v.matches !== undefined && (
+                  <div className="v-comments">
+                    <p className="hint">
+                      {v.read === 0
+                        ? 'The comments could not be read for this video.'
+                        : `${v.matches.length} of the top ${v.read ?? '?'} comments ${v.matches.length === 1 ? 'is' : 'are'} about the topics.`}
+                    </p>
+                    {v.matches.length > 0 && (
+                      <ul>
+                        {v.matches.map((c, i) => (
+                          <li key={`${c.handle}-${i}`}>
+                            <b>@{c.handle}</b>
+                            <p>{c.text}</p>
+                            <span className="topics">{c.topics.join(', ')}</span>
+                            <span className="c-actions">
+                              <a className="secondary" href={profileUrl(platform, c.handle)} target="_blank" rel="noopener noreferrer">Open profile</a>
+                              <button className="quiet" onClick={() => copy(profileUrl(platform, c.handle))}>
+                                {copied === profileUrl(platform, c.handle) ? 'Copied' : 'Copy profile link'}
+                              </button>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
                 <div className="v-actions">
-                  <a className="primary" href={v.url} target="_blank" rel="noopener noreferrer">Open video</a>
-                  <button className="secondary" onClick={() => copy(v)}>{copied === v.url ? 'Copied' : 'Copy link'}</button>
+                  <a className="primary" href={v.url} target="_blank" rel="noopener noreferrer">{platform === 'instagram' ? 'Open reel' : 'Open video'}</a>
+                  <button className="secondary" onClick={() => copy(v.url)}>{copied === v.url ? 'Copied' : 'Copy link'}</button>
                   {tab === 'todo' ? (
                     <button className="secondary" disabled={busy === key} onClick={() => mark(v, true)}>
                       {busy === key ? 'Saving' : 'Mark complete'}

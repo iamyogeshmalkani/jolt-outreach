@@ -56,6 +56,17 @@ def main():
         assert page.query_selector('[data-e2e="browse-video-desc"]') is None
         print("closeVideo ok")
 
+        # opened video: the first comments (top-level only), scrolled for more, never more than asked for
+        page.set_content(search_html())
+        page.evaluate(fn("clickCard", "'/@maker1/video/1'"))
+        page.evaluate(fn("readOpenVideo"))
+        got = page.evaluate(fn("readCommentsPage", "50"))
+        assert got["ok"] and len(got["rows"]) == 50, len(got["rows"])
+        assert got["rows"][0] == {"handle": "fan0", "text": "My screen time is 9 hours a day and the brain rot is real 0"}, got["rows"][0]
+        assert not any("must be ignored" in r["text"] for r in got["rows"])
+        print(f"readCommentsPage ok: {len(got['rows'])} comments, first = {got['rows'][0]}")
+        page.evaluate(fn("closeVideo"))
+
         # a video with no caption still counts as opened, and can be closed again
         page.set_content(search_html())
         assert page.evaluate(fn("clickCard", "'/@maker4/video/4'")) is True
@@ -68,6 +79,7 @@ def main():
         page.set_content('<body><a data-e2e="nav-foryou">x</a><div data-e2e="inbox-list">y</div><div data-e2e="something-new">x</div><div data-e2e="browse-music">m</div></body>')
         info = page.evaluate(fn("readOpenVideo"))
         assert info["opened"] is False and info["caption"] == "" and info["markers"] == ["something-new", "browse-music"], info
+        assert page.evaluate(fn("readCommentsPage")) == {"ok": False, "rows": []}
         print("nothing opened lists the page's elements:", info["markers"])
 
         b.close()
