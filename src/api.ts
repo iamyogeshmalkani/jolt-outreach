@@ -88,8 +88,10 @@ const fromB64 = (b64: string) => new TextDecoder().decode(Uint8Array.from(atob(b
 // Changes the done file on GitHub: reads it, applies `change`, saves it, and tries again if someone else saved in between.
 async function changeRemote<T>(path: string, change: (items: T[]) => T[]): Promise<void> {
   const url = `${API}/repos/${REPO}/contents/${path}`
+  let lastProblem = ''
   for (let attempt = 0; attempt < 3; attempt++) {
-    const res = await fetch(`${url}?ref=data`, { headers: headers('application/vnd.github+json') })
+    // no-store: GitHub lets the browser keep an answer for a minute, and an old one (a missing file, or an old version) makes the save fail.
+    const res = await fetch(`${url}?ref=data`, { headers: headers('application/vnd.github+json'), cache: 'no-store' })
     if (res.status === 401) throw new Error('GitHub did not accept the token. Make a new one in Settings.')
     if (!res.ok && res.status !== 404) throw new Error(`GitHub answered ${res.status} when reading the list.`)
     const file = res.ok ? ((await res.json()) as { sha: string; content: string }) : null
@@ -112,9 +114,13 @@ async function changeRemote<T>(path: string, change: (items: T[]) => T[]): Promi
     if (put.ok) return
     if (put.status === 401) throw new Error('GitHub did not accept the token. Make a new one in Settings.')
     if (put.status === 403 || put.status === 404) throw new Error('The token is not allowed to save here. It needs "Contents: Read and write" on the repo.')
-    if (put.status !== 409 && put.status !== 422) throw new Error(`GitHub answered ${put.status} when saving.`)
+    if (put.status === 409 || put.status === 422) {
+      lastProblem = ((await put.json().catch(() => null)) as { message?: string } | null)?.message ?? ''
+      continue // someone saved in between (or the copy read was old): read again
+    }
+    throw new Error(`GitHub answered ${put.status} when saving.`)
   }
-  throw new Error('Could not save because the list kept changing. Try again.')
+  throw new Error(`Could not save because the list kept changing. Try again.${lastProblem ? ` (GitHub said: ${lastProblem})` : ''}`)
 }
 
 // Saves "complete" for one item (or takes it back). Returns 'shared' when saved on GitHub, 'local' when only this browser knows.
