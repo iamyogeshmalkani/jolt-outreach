@@ -11,3 +11,10 @@ export function ageText(iso: string | null, now = Date.now()): string {
   if (!Number.isFinite(days)) return ''
   return days < 30 ? relative.format(-Math.max(0, days), 'day') : relative.format(-Math.floor(days / 7), 'week')
 }
+
+// Tells one comment from another: the video, who wrote it, and a short fingerprint of what they wrote.
+export function commentKey(videoUrl: string, handle: string, text: string): string {
+  let h = 5381
+  for (let i = 0; i < text.length; i++) h = (Math.imul(h, 33) + text.charCodeAt(i)) | 0
+  return `${videoKey(videoUrl)}|${handle}|${(h >>> 0).toString(36)}`
+}

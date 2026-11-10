@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
-import { getToken, setDone, setToken, type Loaded } from './api'
-import { ageText, formatCount, videoKey } from './helpers'
+import { getToken, setCommentDone, setDone, setToken, type Loaded } from './api'
+import { ageText, commentKey, formatCount, videoKey } from './helpers'
 import Settings from './Settings'
 import type { Platform, Video } from './types'
 
@@ -20,6 +20,7 @@ export default function Videos({ platform, onPlatform, loaded, onRefresh }: {
   const [view, setView] = useState<'videos' | 'comments'>('videos')
   const [tab, setTab] = useState<'todo' | 'done'>('todo')
   const [done, setDoneKeys] = useState(() => new Set(loaded.done.map((d) => videoKey(d.url))))
+  const [doneComments, setDoneComments] = useState(() => new Set(loaded.commentsDone.map((d) => d.id)))
   const [token, setTokenState] = useState(getToken)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [note, setNote] = useState('')
@@ -28,6 +29,11 @@ export default function Videos({ platform, onPlatform, loaded, onRefresh }: {
 
   // The server's list is the truth; anything marked here but not yet seen there is kept until it shows up.
   const doneKeys = useMemo(() => new Set([...loaded.done.map((d) => videoKey(d.url)), ...done]), [loaded.done, done])
+
+  const commentDoneIds = useMemo(
+    () => new Set([...loaded.commentsDone.map((d) => d.id), ...doneComments]),
+    [loaded.commentsDone, doneComments],
+  )
 
   const latest = useMemo(() => loaded.videos.reduce((max, v) => (v.found > max ? v.found : max), ''), [loaded.videos])
   const sorted = useMemo(
@@ -40,9 +46,12 @@ export default function Videos({ platform, onPlatform, loaded, onRefresh }: {
 
   // Every saved comment with the video it is on, newest run first.
   const people = useMemo(
-    () => sorted.flatMap((v) => (v.matches ?? []).map((c) => ({ ...c, video: v }))),
+    () => sorted.flatMap((v) => (v.matches ?? []).map((c) => ({ ...c, video: v, id: commentKey(v.url, c.handle, c.text) }))),
     [sorted],
   )
+  const peopleTodo = people.filter((c) => !commentDoneIds.has(c.id))
+  const peopleDone = people.filter((c) => commentDoneIds.has(c.id))
+  const shownPeople = tab === 'todo' ? peopleTodo : peopleDone
 
   async function mark(v: Video, on: boolean) {
     const key = videoKey(v.url)
@@ -61,6 +70,32 @@ export default function Videos({ platform, onPlatform, loaded, onRefresh }: {
           on
             ? 'Marked complete in this browser only. Add a GitHub token in Settings so the finder never lists it again.'
             : 'Brought back in this browser. Add a GitHub token in Settings to bring it back for the finder too.',
+        )
+      }
+      if (!on) await onRefresh()
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : 'Something went wrong.')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  async function markComment(id: string, on: boolean) {
+    setBusy(id)
+    setNote('')
+    try {
+      const where = await setCommentDone(platform, id, on)
+      setDoneComments((prev) => {
+        const next = new Set(prev)
+        if (on) next.add(id)
+        else next.delete(id)
+        return next
+      })
+      if (where === 'local') {
+        setNote(
+          on
+            ? 'Marked complete in this browser only. Add a GitHub token in Settings to keep it on every device.'
+            : 'Brought back in this browser. Add a GitHub token in Settings to bring it back everywhere.',
         )
       }
       if (!on) await onRefresh()
@@ -94,12 +129,10 @@ export default function Videos({ platform, onPlatform, loaded, onRefresh }: {
           <button aria-pressed={view === 'videos'} onClick={() => setView('videos')}>Videos <b>{loaded.videos.length}</b></button>
           <button aria-pressed={view === 'comments'} onClick={() => setView('comments')}>Comments <b>{people.length}</b></button>
         </div>
-        {view === 'videos' && (
-          <div className="chips" role="group" aria-label="Show">
-            <button aria-pressed={tab === 'todo'} onClick={() => setTab('todo')}>To do <b>{todo.length}</b></button>
-            <button aria-pressed={tab === 'done'} onClick={() => setTab('done')}>Complete <b>{finished.length}</b></button>
-          </div>
-        )}
+        <div className="chips" role="group" aria-label="Show">
+          <button aria-pressed={tab === 'todo'} onClick={() => setTab('todo')}>To do <b>{view === 'videos' ? todo.length : peopleTodo.length}</b></button>
+          <button aria-pressed={tab === 'done'} onClick={() => setTab('done')}>Complete <b>{view === 'videos' ? finished.length : peopleDone.length}</b></button>
+        </div>
         <div className="bar-end">
           <button className="quiet" onClick={() => onRefresh()}>Refresh</button>
           <button className="quiet" onClick={() => setSettingsOpen(true)}>Settings</button>
@@ -115,6 +148,9 @@ export default function Videos({ platform, onPlatform, loaded, onRefresh }: {
 
       {view === 'comments' && (
         <main className="videos">
+          {people.length > 0 && shownPeople.length === 0 && (
+            <p className="empty">{tab === 'todo' ? 'Every comment is marked complete.' : 'No comment is marked complete yet.'}</p>
+          )}
           {people.length === 0 && (
             <p className="empty">
               {loaded.videos.some((v) => v.matches !== undefined)
@@ -123,8 +159,8 @@ export default function Videos({ platform, onPlatform, loaded, onRefresh }: {
             </p>
           )}
           <ul>
-            {people.map((c, i) => (
-              <li key={`${c.handle}-${videoKey(c.video.url)}-${i}`} className="video">
+            {shownPeople.map((c, i) => (
+              <li key={`${c.id}-${i}`} className="video">
                 <p className="v-caption">{c.text}</p>
                 <p className="v-facts">
                   <b>@{c.handle}</b>
@@ -137,6 +173,15 @@ export default function Videos({ platform, onPlatform, loaded, onRefresh }: {
                     {copied === profileUrl(platform, c.handle) ? 'Copied' : 'Copy profile link'}
                   </button>
                   <a className="secondary" href={c.video.url} target="_blank" rel="noopener noreferrer">Open video</a>
+                  {tab === 'todo' ? (
+                    <button className="secondary" disabled={busy === c.id} onClick={() => markComment(c.id, true)}>
+                      {busy === c.id ? 'Saving' : 'Mark complete'}
+                    </button>
+                  ) : (
+                    <button className="quiet" disabled={busy === c.id} onClick={() => markComment(c.id, false)}>
+                      {busy === c.id ? 'Saving' : 'Bring back'}
+                    </button>
+                  )}
                 </div>
               </li>
             ))}
@@ -181,9 +226,13 @@ export default function Videos({ platform, onPlatform, loaded, onRefresh }: {
                     </p>
                     {v.matches.length > 0 && (
                       <ul>
-                        {v.matches.map((c, i) => (
-                          <li key={`${c.handle}-${i}`}>
+                        {v.matches.map((c, i) => {
+                          const id = commentKey(v.url, c.handle, c.text)
+                          const complete = commentDoneIds.has(id)
+                          return (
+                          <li key={`${c.handle}-${i}`} className={complete ? 'is-done' : undefined}>
                             <b>@{c.handle}</b>
+                            {complete && <span className="tag">Complete</span>}
                             <p>{c.text}</p>
                             <span className="topics">{c.topics.join(', ')}</span>
                             <span className="c-actions">
@@ -191,9 +240,13 @@ export default function Videos({ platform, onPlatform, loaded, onRefresh }: {
                               <button className="quiet" onClick={() => copy(profileUrl(platform, c.handle))}>
                                 {copied === profileUrl(platform, c.handle) ? 'Copied' : 'Copy profile link'}
                               </button>
+                              <button className="quiet" disabled={busy === id} onClick={() => markComment(id, !complete)}>
+                                {busy === id ? 'Saving' : complete ? 'Bring back' : 'Mark complete'}
+                              </button>
                             </span>
                           </li>
-                        ))}
+                          )
+                        })}
                       </ul>
                     )}
                   </div>

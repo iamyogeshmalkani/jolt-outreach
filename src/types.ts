@@ -21,3 +21,6 @@ export type Comment = { handle: string; text: string; topics: string[] }
 
 // A video marked complete, as saved in videos_done.json. The finder never lists these again.
 export type Done = { url: string; at: string }
+
+// A comment marked complete, as saved in comments_done.json. `id` comes from commentKey().
+export type CommentDone = { id: string; at: string }

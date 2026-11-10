@@ -71,6 +71,9 @@ The token stays in your Chrome and is only ever sent to GitHub. It can only touc
 - **Mark complete** on the page saves the video to `videos_done.json`, and the finder never lists it
   again. For that the page needs the same kind of GitHub token (page **Settings**, kept in that browser).
   Without a token it only hides the video in that browser.
+- Every comment on the page (in the Comments view and under each video) has its own **Mark complete**.
+  Those are saved to `comments_done.json` (`instagram_comments_done.json` for Instagram), which only the
+  page reads, with the same token rules as videos.
 - If TikTok shows a verification check or you are logged out, the run stops, says why, and any
   automatic runs pause. Fix it in Chrome and choose **Resume automatic runs**.
 - Run the extension in **one** Chrome. It merges with what is already published, so a second one
